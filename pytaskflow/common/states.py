@@ -1,7 +1,7 @@
 # pytaskflow/common/states.py
 from abc import ABC, abstractmethod
 from typing import Dict, Any, final, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 class BaseState(ABC):
     """
@@ -31,7 +31,10 @@ class EnqueuedState(BaseState):
         self.queue = queue
 
     def serialize_data(self) -> Dict[str, Any]:
-        return {"queue": self.queue}
+        data = {"queue": self.queue}
+        if self.reason:
+            data["reason"] = self.reason
+        return data
 
 class ScheduledState(BaseState):
     NAME = "Scheduled"

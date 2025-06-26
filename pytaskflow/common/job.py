@@ -1,7 +1,7 @@
 # pytaskflow/common/job.py
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Optional, Tuple, Dict, Any
 
 @dataclass
@@ -24,7 +24,7 @@ class Job:
     state_name: str
     
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     state_data: Dict[str, Any] = field(default_factory=dict)
     
     # Job metadata

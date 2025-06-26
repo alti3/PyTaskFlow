@@ -4,7 +4,7 @@ import uuid
 import logging
 import json
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 from cronsim import CronSim
 
@@ -47,7 +47,7 @@ class Worker:
         if not isinstance(storage, RedisStorage): # Phase 2 only supports Redis
             return
 
-        now_timestamp = datetime.utcnow().timestamp()
+        now_timestamp = datetime.now(UTC).timestamp()
         
         while True:
             # Using the Lua script to atomically move one job
@@ -72,7 +72,7 @@ class Worker:
             return # Another worker is handling it
 
         try:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             recurring_job_ids = self.storage.redis_client.smembers("pytaskflow:recurring-jobs:ids")
             
             for job_id_bytes in recurring_job_ids:
@@ -129,14 +129,20 @@ class Worker:
             try:
                 self._run_schedulers()
                 # 1. Dequeue a job
-                job = self.storage.dequeue(self.queues, timeout_seconds=1)
-                
-                if job:
-                    logger.info(f"[{self.worker_id}] Picked up job {job.id}")
+                dequeued_job = self.storage.dequeue(self.queues, timeout_seconds=0.1)
+                if dequeued_job:
+                    # Fetch the latest job data from storage to ensure retry_count is up-to-date
+                    job = self.storage.get_job_data(dequeued_job.id)
+                    if not job: # Job might have been deleted or moved by another process
+                        logger.warning(f"[{self.worker_id}] Dequeued job {dequeued_job.id} not found in storage. Skipping.")
+                        continue
+
+                    logger.info(f"[{self.worker_id}] Picked up job {job.id} (state: {job.state_name}, retry_count: {job.retry_count})")
                     # 2. Process it
                     processor = JobProcessor(job, self.storage, self.serializer)
                     processor.process()
-                    logger.info(f"[{self.worker_id}] Finished processing job {job.id}")
+                    updated_job = self.storage.get_job_data(job.id)
+                    logger.info(f"[{self.worker_id}] Finished processing job {job.id}. New state: {updated_job.state_name}, retry_count: {updated_job.retry_count}")
                 
 
             except KeyboardInterrupt:

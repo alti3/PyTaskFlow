@@ -1,14 +1,16 @@
 # pytaskflow/storage/memory_storage.py
+import logging
 import time
-import json
 from collections import deque
 from threading import RLock, Condition
-from typing import Optional, List, Dict
-from datetime import datetime
+from typing import Optional, List, Dict, Any
+from datetime import datetime, UTC
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.common.job import Job
 from pytaskflow.common.states import BaseState, ProcessingState, EnqueuedState
+
+logger = logging.getLogger(__name__)
 
 class MemoryStorage(JobStorage):
     def __init__(self):
@@ -43,6 +45,9 @@ class MemoryStorage(JobStorage):
                 "last_execution": None
             }
             self._recurring_jobs[recurring_job_id] = data
+
+    def _get_current_time(self) -> datetime:
+        return datetime.now(UTC)
 
     def remove_recurring_job(self, recurring_job_id: str):
         with self._lock:
@@ -106,8 +111,16 @@ class MemoryStorage(JobStorage):
             
             job.state_name = state.name
             job.state_data = state.serialize_data()
+            if state.name == EnqueuedState.NAME:
+                self._condition.notify() # Notify if job is re-enqueued
             return True
 
     def get_job_data(self, job_id: str) -> Optional[Job]:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def update_job_field(self, job_id: str, field_name: str, value: Any) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job:
+                setattr(job, field_name, value)

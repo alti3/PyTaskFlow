@@ -1,7 +1,7 @@
 # pytaskflow/storage/redis_storage.py
 import redis
 import json
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 from .base import JobStorage
@@ -112,6 +112,9 @@ class RedisStorage(JobStorage):
             
         # Decode bytes from redis
         job_dict = {k.decode(): v.decode() for k, v in job_data.items()}
+        # Convert retry_count to int
+        if 'retry_count' in job_dict: 
+            job_dict['retry_count'] = int(job_dict['retry_count'])
         
         # Update state to Processing
         self.set_job_state(job_id, ProcessingState("server-redis", "worker-1"))
@@ -143,4 +146,11 @@ class RedisStorage(JobStorage):
         if not job_data:
             return None
         job_dict = {k.decode(): v.decode() for k, v in job_data.items()}
+        # Convert retry_count to int
+        if 'retry_count' in job_dict: 
+            job_dict['retry_count'] = int(job_dict['retry_count'])
         return Job(**job_dict)
+
+    def update_job_field(self, job_id: str, field_name: str, value: Any) -> None:
+        job_key = f"pytaskflow:job:{job_id}"
+        self.redis_client.hset(job_key, field_name, str(value))

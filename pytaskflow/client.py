@@ -1,6 +1,6 @@
 # pytaskflow/client.py
 from typing import Callable, Any, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 from pytaskflow.common.job import Job
 from pytaskflow.common.states import EnqueuedState, ScheduledState
@@ -44,7 +44,7 @@ class BackgroundJobClient:
         func_name = target_func.__name__
         serialized_args = self.serializer.serialize_args(target_func, *args, **kwargs)
         
-        scheduled_state = ScheduledState(enqueue_at, datetime.utcnow())
+        scheduled_state = ScheduledState(enqueue_at, datetime.now(UTC))
 
         job = Job(
             target_module=module_name,

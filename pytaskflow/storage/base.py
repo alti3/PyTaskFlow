@@ -1,6 +1,6 @@
 # pytaskflow/storage/base.py
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 
 from pytaskflow.common.job import Job
@@ -33,3 +33,6 @@ class JobStorage(ABC):
 
     @abstractmethod
     def get_job_data(self, job_id: str) -> Optional[Job]: ...
+
+    @abstractmethod
+    def update_job_field(self, job_id: str, field_name: str, value: Any) -> None: ...
