@@ -1,5 +1,6 @@
 # pytaskflow/server/processor.py
 import traceback
+import logging
 from pytaskflow.common.job import Job
 from pytaskflow.common.states import SucceededState, FailedState, ProcessingState
 from pytaskflow.execution.performer import perform_job
@@ -8,6 +9,8 @@ from pytaskflow.serialization.base import BaseSerializer
 from pytaskflow.common.exceptions import JobLoadError
 from ..filters.builtin import RetryFilter
 from .context import ElectStateContext
+
+logger = logging.getLogger(__name__)
 
 class JobProcessor:
     def __init__(self, job: Job, storage: JobStorage, serializer: BaseSerializer):
@@ -30,6 +33,7 @@ class JobProcessor:
 
         except (Exception, JobLoadError) as e:
             # 4. Handle failure
+            logger.error(f"Job {self.job.id} failed.", exc_info=True)
             exc_type = type(e).__name__
             exc_msg = str(e)
             exc_details = traceback.format_exc()
