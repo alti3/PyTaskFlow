@@ -6,7 +6,7 @@ import json
 from typing import List, Optional
 from datetime import datetime
 
-import croniter
+from cronsim import CronSim
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.storage.redis_storage import RedisStorage
@@ -93,8 +93,8 @@ class Worker:
                     last_execution_str = data.get("last_execution")
                     last_execution = datetime.fromisoformat(last_execution_str) if last_execution_str else now
                     
-                    cron = croniter.croniter(data["cron"], last_execution)
-                    next_execution = cron.get_next(datetime)
+                    cron = CronSim(data["cron"], last_execution)
+                    next_execution = next(cron)
                     
                     if next_execution <= now:
                         # It's time to run!

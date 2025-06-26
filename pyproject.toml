@@ -6,5 +6,5 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "redis>=5.0.0",
-    "croniter>=2.0.0"
+    "cronsim>=2.6",
 ]

@@ -200,7 +200,7 @@ pytaskflow/
 11. **`pytaskflow.scheduling`:**
     *   **RecurringJobScheduler (part of `Worker` or separate process):**
         *   Periodically (e.g., every minute) queries storage for recurring jobs.
-        *   Uses a CRON library (like `python-crontab` or `croniter`) to determine next execution time.
+        *   Uses a CRON library (like `python-crontab` or `cronsim`) to determine next execution time.
         *   If a recurring job is due, creates a new job instance (from template) and enqueues it.
         *   Needs distributed lock per recurring job ID to prevent multiple schedulers from triggering the same job.
     *   **DelayedJobScheduler (part of `Worker` or separate process):**
