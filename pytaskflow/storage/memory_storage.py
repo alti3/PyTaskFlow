@@ -27,19 +27,23 @@ class MemoryStorage(JobStorage):
 
     def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
         with self._lock:
-            for queue_name in queues:
-                if queue_name in self._queues and self._queues[queue_name]:
-                    job_id = self._queues[queue_name].popleft()
-                    job = self._jobs[job_id]
-                    
-                    # Atomically move to processing
-                    self.set_job_state(job.id, ProcessingState("server-mvp", "worker-1"))
-                    self._processing[job.id] = job
-                    return job
+            start_time = time.monotonic()
+            while True: # This loop will now work as intended
+                for queue_name in queues:
+                    if queue_name in self._queues and self._queues[queue_name]:
+                        job_id = self._queues[queue_name].popleft()
+                        job = self._jobs[job_id]
+                        
+                        self.set_job_state(job.id, ProcessingState("server-mvp", "worker-1"))
+                        self._processing[job.id] = job
+                        return job
 
-            
-            
-            return None
+                remaining_timeout = timeout_seconds - (time.monotonic() - start_time)
+                if remaining_timeout <= 0:
+                    return None
+                
+                # Wait for a job to be enqueued or for the timeout to expire
+                self._condition.wait(timeout=remaining_timeout)
 
 
     def acknowledge(self, job_id: str) -> None:

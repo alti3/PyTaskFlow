@@ -327,36 +327,15 @@ pytaskflow/
 7.  **Dashboard Interactivity:** Requires care with security if actions (retry, delete) are exposed. CSRF protection.
 8.  **Dependencies:** Keep core dependencies minimal. Storage backends, CRON libraries, web frameworks (for dashboard/integrations) will add their own.
 
-**VII. Development Roadmap (Simplified)**
+**VII. Development Roadmap**
 
-1.  **Phase 1: Core MVP**
-    *   Job data model.
-    *   JSON serializer (function path + args).
-    *   `JobStorage` ABC and `MemoryStorage` implementation.
-    *   Basic `BackgroundJobClient` for fire-and-forget.
-    *   Basic `Worker` (single-threaded, synchronous execution).
-    *   Core states: Enqueued, Processing, Succeeded, Failed.
-    *   Basic retry filter.
-2.  **Phase 2: Storage & Basic Features**
-    *   `RedisStorage` implementation.
-    *   Delayed jobs (`ScheduledState` and scheduler).
-    *   Recurring jobs (CRON, `RecurringJobManager`, scheduler).
-    *   Basic logging.
-3.  **Phase 3: Worker Enhancements & Dashboard**
-    *   Threaded worker.
-    *   Basic Dashboard (read-only job views).
-    *   More states (Deleted, Awaiting).
-4.  **Phase 4: Advanced Features & Integrations**
-    *   Asyncio worker support.
-    *   SQLAlchemy storage (optional).
-    *   Interactive Dashboard (retry/delete jobs).
-    *   FastAPI/Litestar integration plugins.
-    *   Documentation and examples.
-5.  **Phase 5: Polish & Community**
-    *   More built-in filters.
-    *   Performance optimizations.
-    *   Extensive testing.
-    *   Contrib modules.
+| Phase | Title                           | Status      | Description                                                                      |
+|-------|---------------------------------|-------------|----------------------------------------------------------------------------------|
+| 1     | Core MVP                        | ✅ Complete | • Job data model<br>• JSON serializer (function path + args)<br>• `JobStorage` ABC and `MemoryStorage` implementation<br>• Basic `BackgroundJobClient` for fire-and-forget<br>• Basic `Worker` (single-threaded, synchronous execution)<br>• Core states: Enqueued, Processing, Succeeded, Failed<br>• Basic retry filter |
+| 2     | Storage & Basic Features        | ⏳ To Do    | • `RedisStorage` implementation<br>• Delayed jobs (`ScheduledState` and scheduler)<br>• Recurring jobs (CRON, `RecurringJobManager`, scheduler)<br>• Basic logging |
+| 3     | Worker Enhancements & Dashboard | ⏳ To Do    | • Threaded worker<br>• Basic Dashboard (read-only job views)<br>• More states (Deleted, Awaiting) |
+| 4     | Advanced Features & Integrations | ⏳ To Do    | • Asyncio worker support<br>• SQLAlchemy storage (optional)<br>• Interactive Dashboard (retry/delete jobs)<br>• FastAPI/Litestar integration plugins<br>• Documentation and examples |
+| 5     | Polish & Community              | ⏳ To Do    | • More built-in filters<br>• Performance optimizations<br>• Extensive testing<br>• Contrib modules |
 
 This plan provides a solid foundation.
 Remember to start small, test thoroughly, and iterate.
