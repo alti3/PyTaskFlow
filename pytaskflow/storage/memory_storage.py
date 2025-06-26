@@ -1,18 +1,22 @@
 # pytaskflow/storage/memory_storage.py
 import time
+import json
 from collections import deque
 from threading import RLock, Condition
 from typing import Optional, List, Dict
+from datetime import datetime
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.common.job import Job
-from pytaskflow.common.states import BaseState, ProcessingState
+from pytaskflow.common.states import BaseState, ProcessingState, EnqueuedState
 
 class MemoryStorage(JobStorage):
     def __init__(self):
         self._jobs: Dict[str, Job] = {}
         self._queues: Dict[str, deque[str]] = {}
         self._processing: Dict[str, Job] = {} # Jobs currently being processed
+        self._scheduled: Dict[str, datetime] = {} # job_id -> enqueue_at
+        self._recurring_jobs: Dict[str, dict] = {} # recurring_job_id -> job data
         self._lock = RLock()
         self._condition = Condition(self._lock)
 
@@ -24,6 +28,46 @@ class MemoryStorage(JobStorage):
             self._queues[job.queue].append(job.id)
             self._condition.notify() # Notify any waiting worker
         return job.id
+
+    def schedule(self, job: Job, enqueue_at: datetime) -> str:
+        with self._lock:
+            self._jobs[job.id] = job
+            self._scheduled[job.id] = enqueue_at
+        return job.id
+
+    def add_recurring_job(self, recurring_job_id: str, job_template: Job, cron_expression: str):
+        with self._lock:
+            data = {
+                "job": job_template.__dict__,
+                "cron": cron_expression,
+                "last_execution": None
+            }
+            self._recurring_jobs[recurring_job_id] = data
+
+    def remove_recurring_job(self, recurring_job_id: str):
+        with self._lock:
+            if recurring_job_id in self._recurring_jobs:
+                del self._recurring_jobs[recurring_job_id]
+
+    def trigger_recurring_job(self, recurring_job_id: str):
+        with self._lock:
+            if recurring_job_id not in self._recurring_jobs:
+                return
+            
+            data = self._recurring_jobs[recurring_job_id]
+            job_dict = data["job"]
+            
+            # Create a new job instance from the template and enqueue it immediately
+            job_instance = Job(
+                target_module=job_dict["target_module"],
+                target_function=job_dict["target_function"],
+                args=job_dict["args"],
+                kwargs=job_dict["kwargs"],
+                state_name=EnqueuedState.NAME,
+                state_data=EnqueuedState().serialize_data(),
+                queue=job_dict.get("queue", "default")
+            )
+            self.enqueue(job_instance)
 
     def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
         with self._lock:

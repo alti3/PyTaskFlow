@@ -265,8 +265,8 @@ class Worker:
 ### 3. Recurring Jobs & Scheduler
 
 #### 3.1. CRON Library
-Add `croniter` to the project's dependencies in `pyproject.toml`.
-`dependencies = [ ..., "croniter" ]`
+Add `cronsim` to the project's dependencies in `pyproject.toml`.
+`dependencies = [ ..., "cronsim" ]`
 
 #### 3.2. Client and Storage Methods for Recurring Jobs
 These methods allow for the management of recurring jobs.
@@ -321,7 +321,7 @@ This logic is more complex and also integrated into the worker's scheduler run.
 
 ```python
 # pytaskflow/server/worker.py
-import croniter
+from consim import CronSim
 
 class Worker:
     # ...
@@ -359,8 +359,8 @@ class Worker:
                     last_execution_str = data.get("last_execution")
                     last_execution = datetime.fromisoformat(last_execution_str) if last_execution_str else now
                     
-                    cron = croniter.croniter(data["cron"], last_execution)
-                    next_execution = cron.get_next(datetime)
+                    cron = CronSim(data["cron"], last_execution)
+                    next_execution = next(cron)
                     
                     if next_execution <= now:
                         # It's time to run!
@@ -435,6 +435,6 @@ class JobProcessor:
 *   A `ScheduledState` class is added to the state machine.
 *   The `Worker` process is enhanced with two scheduler components: one for delayed jobs and one for recurring jobs, both using Redis as their backend.
 *   Structured logging is added to key components, improving the traceability and debuggability of the system.
-*   The project now requires `redis-py` and `croniter` as dependencies.
+*   The project now requires `redis-py` and `cronsim` as dependencies.
 
 With the completion of Phase 2, PyTaskFlow will be a feature-rich and persistent background job system ready for more advanced capabilities.

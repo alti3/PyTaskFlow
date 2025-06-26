@@ -1,43 +1,149 @@
 # pytaskflow/server/worker.py
 import time
 import uuid
-from typing import List
+import logging
+import json
+from typing import List, Optional
+from datetime import datetime
+
+from cronsim import CronSim
 
 from pytaskflow.storage.base import JobStorage
+from pytaskflow.storage.redis_storage import RedisStorage
 from pytaskflow.serialization.base import BaseSerializer
 from pytaskflow.server.processor import JobProcessor
 from pytaskflow.serialization.json_serializer import JsonSerializer
+from ..common.states import EnqueuedState
+from ..common.job import Job
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 class Worker:
-    def __init__(self, storage: JobStorage, serializer: BaseSerializer = None, queues: List[str] = ["default"]):
+    def __init__(self, storage: JobStorage, serializer: Optional[BaseSerializer] = None, queues: List[str] = ["default"], scheduler_poll_interval_seconds: int = 15):
         self.storage = storage
         self.serializer = serializer or JsonSerializer()
         self.queues = queues
         self.server_id = f"server:{uuid.uuid4()}"
         self.worker_id = f"worker:{uuid.uuid4()}"
         self._shutdown_requested = False
+        self.scheduler_poll_interval = scheduler_poll_interval_seconds
+        self._last_scheduler_run = 0
+
+    def _run_schedulers(self):
+        """Runs periodic tasks like enqueuing scheduled jobs."""
+        now = time.monotonic()
+        if (now - self._last_scheduler_run) < self.scheduler_poll_interval:
+            return
+        
+        logger.info(f"[{self.worker_id}] Running schedulers...")
+        self._enqueue_due_scheduled_jobs()
+        self._enqueue_due_recurring_jobs()
+        
+        self._last_scheduler_run = now
+
+    def _enqueue_due_scheduled_jobs(self):
+        storage = self.storage
+        if not isinstance(storage, RedisStorage): # Phase 2 only supports Redis
+            return
+
+        now_timestamp = datetime.utcnow().timestamp()
+        
+        while True:
+            # Using the Lua script to atomically move one job
+            job_id_bytes = storage.move_to_enqueued_script(
+                keys=["pytaskflow:scheduled"], 
+                args=[now_timestamp, EnqueuedState.NAME, "default"] # Assume default queue for now
+            )
+            
+            if not job_id_bytes:
+                break # No more jobs to enqueue
+            
+            logger.info(f"[{self.worker_id}] Moved scheduled job {job_id_bytes.decode()} to enqueued.")
+
+    def _enqueue_due_recurring_jobs(self):
+        # This entire method should be protected by a distributed lock to ensure only one worker
+        # runs the recurring job scheduler at a time.
+        if not isinstance(self.storage, RedisStorage):
+            return
+
+        lock_key = "pytaskflow:lock:recurring-scheduler"
+        if not self.storage.redis_client.set(lock_key, self.server_id, ex=60, nx=True):
+            return # Another worker is handling it
+
+        try:
+            now = datetime.utcnow()
+            recurring_job_ids = self.storage.redis_client.smembers("pytaskflow:recurring-jobs:ids")
+            
+            for job_id_bytes in recurring_job_ids:
+                job_id = job_id_bytes.decode()
+                
+                # Use a distributed lock per job to handle updates atomically
+                job_lock_key = f"pytaskflow:lock:recurring-job:{job_id}"
+                if not self.storage.redis_client.set(job_lock_key, self.server_id, ex=10, nx=True):
+                    continue
+
+                try:
+                    data_str = self.storage.redis_client.hget("pytaskflow:recurring-jobs", job_id)
+                    if not data_str:
+                        continue
+                        
+                    data = json.loads(data_str.decode())
+                    
+                    last_execution_str = data.get("last_execution")
+                    last_execution = datetime.fromisoformat(last_execution_str) if last_execution_str else now
+                    
+                    cron = CronSim(data["cron"], last_execution)
+                    next_execution = next(cron)
+                    
+                    if next_execution <= now:
+                        # It's time to run!
+                        logger.info(f"[{self.worker_id}] Triggering recurring job {job_id}")
+                        job_dict = data["job"]
+                        # Create a new, unique job instance from the template
+                        job_instance = Job(
+                            target_module=job_dict["target_module"],
+                            target_function=job_dict["target_function"],
+                            args=job_dict["args"],
+                            kwargs=job_dict["kwargs"],
+                            state_name=EnqueuedState.NAME,
+                            state_data=EnqueuedState().serialize_data(),
+                            queue=job_dict.get("queue", "default"),
+                            # recurring_job_id=job_id # Link it back
+                        )
+                        self.storage.enqueue(job_instance)
+                        
+                        # Update last execution time
+                        data["last_execution"] = now.isoformat()
+                        self.storage.redis_client.hset("pytaskflow:recurring-jobs", job_id, json.dumps(data))
+                finally:
+                    self.storage.redis_client.delete(job_lock_key)
+
+        finally:
+            self.storage.redis_client.delete(lock_key)
 
     def run(self):
         """Starts the worker's processing loop."""
-        print(f"[{self.worker_id}] Starting worker for queues: {', '.join(self.queues)}")
+        logger.info(f"[{self.worker_id}] Starting worker for queues: {', '.join(self.queues)}")
         while not self._shutdown_requested:
             try:
+                self._run_schedulers()
                 # 1. Dequeue a job
                 job = self.storage.dequeue(self.queues, timeout_seconds=1)
                 
                 if job:
-                    print(f"[{self.worker_id}] Picked up job {job.id}")
+                    logger.info(f"[{self.worker_id}] Picked up job {job.id}")
                     # 2. Process it
                     processor = JobProcessor(job, self.storage, self.serializer)
                     processor.process()
-                    print(f"[{self.worker_id}] Finished processing job {job.id}")
+                    logger.info(f"[{self.worker_id}] Finished processing job {job.id}")
                 
 
             except KeyboardInterrupt:
-                print(f"[{self.worker_id}] Shutdown requested...")
+                logger.info(f"[{self.worker_id}] Shutdown requested...")
                 self._shutdown_requested = True
             except Exception as e:
-                print(f"[{self.worker_id}] Unhandled exception in worker loop: {e}")
+                logger.error(f"[{self.worker_id}] Unhandled exception in worker loop: {e}", exc_info=True)
                 time.sleep(5) # Cooldown period after a major failure
         
-        print(f"[{self.worker_id}] Worker has stopped.")
+        logger.info(f"[{self.worker_id}] Worker has stopped.")
