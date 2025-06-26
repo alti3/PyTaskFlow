@@ -6,12 +6,15 @@ from pytaskflow.execution.performer import perform_job
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.serialization.base import BaseSerializer
 from pytaskflow.common.exceptions import JobLoadError
+from ..filters.builtin import RetryFilter
+from .context import ElectStateContext
 
 class JobProcessor:
     def __init__(self, job: Job, storage: JobStorage, serializer: BaseSerializer):
         self.job = job
         self.storage = storage
         self.serializer = serializer
+        self.filters = [RetryFilter(attempts=3)]
 
     def process(self):
         try:
@@ -36,7 +39,17 @@ class JobProcessor:
                 exception_message=exc_msg, 
                 exception_details=exc_details
             )
-            self.storage.set_job_state(self.job.id, failed_state, expected_old_state=ProcessingState.NAME)
+            
+            # --- START FILTER INTEGRATION ---
+            elect_state_context = ElectStateContext(job=self.job, candidate_state=failed_state)
+            
+            for f in self.filters:
+                f.on_state_election(elect_state_context)
+            
+            final_state = elect_state_context.candidate_state
+            # --- END FILTER INTEGRATION ---
+
+            self.storage.set_job_state(self.job.id, final_state, expected_old_state=ProcessingState.NAME)
         
         finally:
             # 5. Acknowledge completion

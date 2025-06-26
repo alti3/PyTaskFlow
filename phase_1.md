@@ -204,7 +204,7 @@ class JsonSerializer(BaseSerializer):
     def serialize_job(self, job: Job) -> str:
         # For Phase 1, we can just serialize the dataclass. Later, this might get more complex.
         # This assumes state_data is already prepared for JSON.
-        return json.dumps(job.__dict__)
+        return json.dumps(job.__dict__, default=str)
 
     def deserialize_job(self, data: str) -> Job:
         job_dict = json.loads(data)
@@ -430,18 +430,20 @@ A class that orchestrates the processing of a single job, including state change
 ```python
 # pytaskflow/server/processor.py
 import traceback
-from .context import PerformContext
+from .context import ElectStateContext
 from ..common.job import Job
-from ..common.states import SucceededState, FailedState
+from ..common.states import SucceededState, FailedState, ProcessingState
 from ..execution.performer import perform_job
 from ..storage.base import JobStorage
 from ..serialization.base import BaseSerializer
+from ..filters.builtin import RetryFilter
 
 class JobProcessor:
     def __init__(self, job: Job, storage: JobStorage, serializer: BaseSerializer):
         self.job = job
         self.storage = storage
         self.serializer = serializer
+        self.filters = [RetryFilter(attempts=3)]
 
     def process(self):
         try:
@@ -466,7 +468,17 @@ class JobProcessor:
                 exception_message=exc_msg, 
                 exception_details=exc_details
             )
-            self.storage.set_job_state(self.job.id, failed_state, expected_old_state=ProcessingState.NAME)
+            
+            # --- START FILTER INTEGRATION ---
+            elect_state_context = ElectStateContext(job=self.job, candidate_state=failed_state)
+            
+            for f in self.filters:
+                f.on_state_election(elect_state_context)
+            
+            final_state = elect_state_context.candidate_state
+            # --- END FILTER INTEGRATION ---
+
+            self.storage.set_job_state(self.job.id, final_state, expected_old_state=ProcessingState.NAME)
         
         finally:
             # 5. Acknowledge completion
@@ -531,9 +543,10 @@ This defines the interface for all filters. We'll only implement `on_state_elect
 ```python
 # pytaskflow/filters/base.py
 from abc import ABC, abstractmethod
+from ..server.context import ElectStateContext
 
 class JobFilter(ABC):
-    def on_state_election(self, elect_state_context):
+    def on_state_election(self, elect_state_context: ElectStateContext):
         pass # Default implementation does nothing
 ```
 
@@ -544,14 +557,13 @@ This is a conceptual name. In Python, it will be a class. This filter implements
 # pytaskflow/filters/builtin.py
 from .base import JobFilter
 from ..common.states import EnqueuedState, FailedState
+from ..server.context import ElectStateContext
 
 class RetryFilter(JobFilter):
     def __init__(self, attempts: int = 3):
         self.attempts = attempts
 
-    def on_state_election(self, elect_state_context):
-        # This context object will be fleshed out in a later phase.
-        # For now, let's assume it has these properties.
+    def on_state_election(self, elect_state_context: ElectStateContext):
         job = elect_state_context.job
         candidate_state = elect_state_context.candidate_state
         
@@ -569,7 +581,6 @@ class RetryFilter(JobFilter):
                     reason=new_reason
                 )
 ```
-**Note:** The filter system itself (how filters are discovered and applied) is not fully built in this phase but the core retry logic is defined. For the MVP, the `JobProcessor` could manually apply a `RetryFilter`.
 
 ## IV. Summary of Phase 1 Deliverables
 
