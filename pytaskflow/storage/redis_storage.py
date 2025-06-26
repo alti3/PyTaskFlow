@@ -6,7 +6,7 @@ from datetime import datetime
 
 from .base import JobStorage
 from ..common.job import Job
-from ..common.states import BaseState, ProcessingState
+from ..common.states import BaseState, ProcessingState, EnqueuedState
 
 class RedisStorage(JobStorage):
     def __init__(self, connection_pool: Optional[redis.ConnectionPool] = None, **redis_options):
@@ -63,9 +63,26 @@ class RedisStorage(JobStorage):
         self.redis_client.srem("pytaskflow:recurring-jobs:ids", recurring_job_id)
 
     def trigger_recurring_job(self, recurring_job_id: str):
-        # This is a simplified trigger. A more robust implementation would
-        # directly enqueue a job based on the template.
-        pass
+        # Fetch the recurring job template
+        data_str = self.redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
+        if not data_str:
+            # Recurring job doesn't exist, nothing to trigger
+            return
+
+        data = json.loads(data_str.decode())
+        job_dict = data["job"]
+        
+        # Create a new job instance from the template and enqueue it immediately
+        job_instance = Job(
+            target_module=job_dict["target_module"],
+            target_function=job_dict["target_function"],
+            args=job_dict["args"],
+            kwargs=job_dict["kwargs"],
+            state_name=EnqueuedState.NAME,
+            state_data=EnqueuedState().serialize_data(),
+            queue=job_dict.get("queue", "default")
+        )
+        self.enqueue(job_instance)
 
     def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
         # BRPOPLPUSH is atomic and reliable. It moves an item from one list to another.
@@ -100,6 +117,10 @@ class RedisStorage(JobStorage):
         self.set_job_state(job_id, ProcessingState("server-redis", "worker-1"))
         
         return Job(**job_dict)
+
+    def acknowledge(self, job_id: str) -> None:
+        # Remove from the processing list
+        self.redis_client.lrem(f"pytaskflow:queue:processing", 1, job_id)
 
     def set_job_state(self, job_id: str, state: BaseState, expected_old_state: Optional[str] = None) -> bool:
         job_key = f"pytaskflow:job:{job_id}"
