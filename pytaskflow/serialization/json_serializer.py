@@ -5,6 +5,7 @@ from typing import Callable, Tuple, Dict, Any
 from pytaskflow.serialization.base import BaseSerializer
 from pytaskflow.common.job import Job
 
+
 class JsonSerializer(BaseSerializer):
     def serialize_job(self, job: Job) -> str:
         # For Phase 1, we can just serialize the dataclass. Later, this might get more complex.
@@ -15,7 +16,9 @@ class JsonSerializer(BaseSerializer):
         job_dict = json.loads(data)
         return Job(**job_dict)
 
-    def serialize_args(self, target_func: Callable, *args: Any, **kwargs: Any) -> Tuple[str, str]:
+    def serialize_args(
+        self, target_func: Callable, *args: Any, **kwargs: Any
+    ) -> Tuple[str, str]:
         # This method is more for the client-side to prepare the job
         # For now, let's assume the client prepares serialized args directly.
         # This method will become more important with decorators.
@@ -23,7 +26,7 @@ class JsonSerializer(BaseSerializer):
 
     def deserialize_args(self, args_str: str, kwargs_str: str) -> Tuple[Tuple, Dict]:
         return tuple(json.loads(args_str)), json.loads(kwargs_str)
-    
+
     def serialize_state_data(self, data: Dict[str, Any]) -> str:
         # Special handling for non-serializable objects like 'result' in SucceededState might be needed
         # For MVP, we'll assume basic types.

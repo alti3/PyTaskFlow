@@ -5,9 +5,11 @@ from pytaskflow.config import configure
 from pytaskflow.storage.memory_storage import MemoryStorage
 from pytaskflow.server.worker import Worker
 
+
 def sample_task(x, y):
     print(f"Executing sample_task with args: {x}, {y}")
     return x + y
+
 
 if __name__ == "__main__":
     # 1. Configure PyTaskFlow
@@ -23,12 +25,13 @@ if __name__ == "__main__":
 
     # 4. Start a worker in a separate thread (for demonstration)
     import threading
-    worker = Worker(storage, queues=['default'])
+
+    worker = Worker(storage, queues=["default"])
     worker_thread = threading.Thread(target=worker.run, daemon=True)
     worker_thread.start()
 
     # 5. Wait and check job status
-    time.sleep(5) # Give the worker time to process
+    time.sleep(5)  # Give the worker time to process
 
     job_data = storage.get_job_data(job_id)
     print(f"\nJob data after execution: {job_data}")

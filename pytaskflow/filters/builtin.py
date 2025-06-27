@@ -17,18 +17,25 @@ class RetryFilter(JobFilter):
 
         if isinstance(candidate_state, FailedState):
             current_retry_count = job.retry_count
-            logger.debug(f"RetryFilter: Job {job.id} failed. Current retry count: {current_retry_count}, Max attempts: {self.attempts}")
-            
+            logger.debug(
+                f"RetryFilter: Job {job.id} failed. Current retry count: {current_retry_count}, Max attempts: {self.attempts}"
+            )
+
             if current_retry_count < self.attempts:
                 # Increment retry count and re-enqueue
                 job.retry_count += 1
-                logger.debug(f"RetryFilter: Re-enqueuing job {job.id}. New retry count: {job.retry_count}")
-                
+                logger.debug(
+                    f"RetryFilter: Re-enqueuing job {job.id}. New retry count: {job.retry_count}"
+                )
+
                 # Change the candidate state to Enqueued
-                new_reason = f"Retrying job... Attempt {job.retry_count} of {self.attempts}"
+                new_reason = (
+                    f"Retrying job... Attempt {job.retry_count} of {self.attempts}"
+                )
                 elect_state_context.candidate_state = EnqueuedState(
-                    queue=job.queue, 
-                    reason=new_reason
+                    queue=job.queue, reason=new_reason
                 )
             else:
-                logger.debug(f"RetryFilter: Job {job.id} retries exhausted. Moving to Failed state.")
+                logger.debug(
+                    f"RetryFilter: Job {job.id} retries exhausted. Moving to Failed state."
+                )
