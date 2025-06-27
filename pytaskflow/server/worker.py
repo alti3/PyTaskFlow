@@ -59,22 +59,24 @@ class Worker:
         now_timestamp = datetime.now(UTC).timestamp()
 
         while True:
-            # Using the Lua script to atomically move one job
-            job_id_bytes = storage.move_to_enqueued_script(
+            # Using the Lua script to atomically move jobs
+            job_ids_result = storage.move_to_enqueued_script(
                 keys=["pytaskflow:scheduled"],
                 args=[
                     now_timestamp,
                     EnqueuedState.NAME,
-                    "default",
-                ],  # Assume default queue for now
+                ],
             )
 
-            if not job_id_bytes:
+            if not job_ids_result:
                 break  # No more jobs to enqueue
 
-            logger.info(
-                f"[{self.worker_id}] Moved scheduled job {job_id_bytes.decode()} to enqueued."
-            )
+            # The script returns a list of job IDs, iterate through them
+            for job_id_bytes in job_ids_result:
+                job_id = job_id_bytes.decode() if isinstance(job_id_bytes, bytes) else job_id_bytes
+                logger.info(
+                    f"[{self.worker_id}] Moved scheduled job {job_id} to enqueued."
+                )
 
     def _enqueue_due_recurring_jobs(self):
         # This entire method should be protected by a distributed lock to ensure only one worker

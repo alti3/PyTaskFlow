@@ -52,6 +52,25 @@ class RedisStorage(JobStorage):
             return due_jobs
         """)
 
+        # Lua script for atomic dequeue from multiple queues
+        self.atomic_dequeue_script = self.redis_client.register_script("""
+            local processing_key = KEYS[1]
+            local timeout = tonumber(ARGV[1])
+            
+            -- Try each queue in order
+            for i = 2, #ARGV do
+                local queue_key = ARGV[i]
+                local job_id = redis.call('RPOP', queue_key)
+                if job_id then
+                    -- Atomically move to processing list
+                    redis.call('LPUSH', processing_key, job_id)
+                    return {queue_key, job_id}
+                end
+            end
+            
+            return nil
+        """)
+
     def _serialize_job_for_storage(self, job: Job) -> dict:
         """Convert job to a dict with all values as strings for Redis storage."""
         job_dict = {}
@@ -150,34 +169,47 @@ class RedisStorage(JobStorage):
         Atomically fetches a job from one of the specified queues and places it
         into a reliable 'processing' list to prevent job loss on worker failure.
         
-        This uses `brpoplpush`, which is the correct high-level command in redis-py
-        for this pattern. It transparently uses BLMOVE on Redis 6.2+.
-
-        Using brpoplpush instead of running brpop and then lpush ensures atomicity, atomically removes an element from one list and pushes it to another (a processing/backup list).
-        Otherwise we risk losing the job if the worker fails/crashes between the two commands (brpop and lpush).
-
-        This is a common pattern in Redis for reliable job processing.
+        Uses a Lua script to guarantee atomicity across the entire operation.
         """
         source_queues = [f"pytaskflow:queue:{q}" for q in queues]
         processing_list = "pytaskflow:queue:processing"
         
-        try:
-            job_id_bytes = self.redis_client.brpoplpush(
-                source_queues, processing_list, timeout=timeout_seconds
-            )
-        except redis.exceptions.TimeoutError:
-            return None # Expected when no job is available
-
-        if not job_id_bytes:
-            return None # No job found within the timeout
-
-        job_id = job_id_bytes.decode()
-
-        # The job is now safely in the processing list. Update its state.
-        processing_state = ProcessingState("server-redis", "worker-1")
-        self.set_job_state(job_id, processing_state)
-
-        return self.get_job_data(job_id)
+        # Try immediate atomic pop first
+        result = self.atomic_dequeue_script(
+            keys=[processing_list],
+            args=[timeout_seconds] + source_queues
+        )
+        
+        if result:
+            queue_name, job_id = result
+            job_id = job_id.decode() if isinstance(job_id, bytes) else job_id
+            
+            # Update job state
+            processing_state = ProcessingState("server-redis", "worker-1")
+            self.set_job_state(job_id, processing_state)
+            
+            return self.get_job_data(job_id)
+        
+        # If no job immediately available, use blocking brpop as fallback
+        if timeout_seconds > 0:
+            try:
+                result = self.redis_client.brpop(source_queues, timeout=timeout_seconds)
+                if result:
+                    queue_name, job_id_bytes = result
+                    job_id = job_id_bytes.decode()
+                    
+                    # Move to processing list
+                    self.redis_client.lpush(processing_list, job_id)
+                    
+                    # Update job state
+                    processing_state = ProcessingState("server-redis", "worker-1")
+                    self.set_job_state(job_id, processing_state)
+                    
+                    return self.get_job_data(job_id)
+            except redis.exceptions.TimeoutError:
+                pass
+        
+        return None  # No job available
 
     def acknowledge(self, job_id: str) -> None:
         """Removes a job from the processing list upon successful completion or permanent failure."""
