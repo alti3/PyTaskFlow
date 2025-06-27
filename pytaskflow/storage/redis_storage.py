@@ -1,4 +1,3 @@
-# pytaskflow/storage/redis_storage.py
 import redis
 import json
 import uuid
@@ -44,6 +43,32 @@ class RedisStorage(JobStorage):
             redis.call('LPUSH', 'pytaskflow:queue:' .. queue, job_id)
             
             return job_id
+        """)
+        
+        # Load Lua script for an atomic BRPOP + LPUSH to a processing queue
+        self.atomic_brpop_and_move_script = self.redis_client.register_script("""
+            -- Atomically block on popping a job from source queues and push it to a destination queue.
+            -- KEYS[1...N-1]: Source queues
+            -- KEYS[N]: Destination (processing) queue
+            -- ARGV[1]: Timeout
+            
+            local queues = {}
+            for i = 1, #KEYS - 1 do
+                table.insert(queues, KEYS[i])
+            end
+            
+            local result = redis.call('BRPOP', unpack(queues), ARGV[1])
+            
+            if result then
+                -- A job was found. result[1] is the queue name, result[2] is the job_id.
+                local job_id = result[2]
+                local dest_queue = KEYS[#KEYS]
+                -- Push it to the processing queue for reliability.
+                redis.call('LPUSH', dest_queue, job_id)
+                return job_id -- Return only the job_id
+            end
+            
+            return nil
         """)
 
     def _serialize_job_for_storage(self, job: Job) -> dict:
@@ -141,27 +166,26 @@ class RedisStorage(JobStorage):
         self.enqueue(job_instance)
 
     def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
-        # Use BRPOPLPUSH to atomically move job from queue to processing
-        if timeout_seconds == 0:
-            timeout_seconds = None
-
+        processing_queue = "pytaskflow:queue:processing"
         queue_keys = [f"pytaskflow:queue:{q}" for q in queues]
-        result = self.redis_client.brpop(queue_keys, timeout=timeout_seconds)
+        
+        # The Lua script needs all source keys and the one destination key
+        script_keys = queue_keys + [processing_queue]
 
-        if not result:
+        job_id_bytes = self.atomic_brpop_and_move_script(keys=script_keys, args=[timeout_seconds])
+
+        if not job_id_bytes:
             return None
 
-        queue_key, job_id_bytes = result
         job_id = job_id_bytes.decode()
 
-        # Move to processing and update state
+        # Update job state to Processing
         with self.redis_client.pipeline() as pipe:
-            pipe.lpush("pytaskflow:queue:processing", job_id)
             pipe.hset(f"pytaskflow:job:{job_id}", "state_name", ProcessingState.NAME)
             pipe.hset(
                 f"pytaskflow:job:{job_id}",
                 "state_data",
-                json.dumps({"server_id": "server-mvp", "worker_id": "worker-1"}),
+                json.dumps({"server_id": "server-redis", "worker_id": "worker-redis"}),
             )
             pipe.execute()
 
@@ -175,16 +199,24 @@ class RedisStorage(JobStorage):
     ) -> bool:
         job_key = f"pytaskflow:job:{job_id}"
 
-        # If expected_old_state is specified, check it first
+        # This check is not perfectly atomic without WATCH, but it's a strong deterrent
         if expected_old_state:
             current_state = self.redis_client.hget(job_key, "state_name")
             if not current_state or current_state.decode() != expected_old_state:
                 return False
 
-        # Update state
         with self.redis_client.pipeline() as pipe:
+            # Update state in the job's hash
             pipe.hset(job_key, "state_name", state.name)
             pipe.hset(job_key, "state_data", json.dumps(state.serialize_data()))
+
+            # If the new state is Enqueued (i.e., for a retry), move the job
+            # from the processing list back to its original queue.
+            if isinstance(state, EnqueuedState):
+                queue_name = state.queue
+                pipe.lrem("pytaskflow:queue:processing", 1, job_id)
+                pipe.lpush(f"pytaskflow:queue:{queue_name}", job_id)
+            
             pipe.execute()
 
         return True

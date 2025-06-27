@@ -26,7 +26,7 @@ class JobProcessor:
         self.filters = [RetryFilter(attempts=3)]
 
     def process(self):
-        final_state = None  # Initialize final_state to ensure it's always bound
+        final_state = None
         try:
             # 1. Deserialize args
             args, kwargs = self.serializer.deserialize_args(
@@ -45,9 +45,7 @@ class JobProcessor:
             self.storage.set_job_state(
                 self.job.id, succeeded_state, expected_old_state=ProcessingState.NAME
             )
-            final_state = (
-                succeeded_state  # Initialize final_state here for success path
-            )
+            final_state = succeeded_state
 
         except (Exception, JobLoadError) as e:
             # 4. Handle failure
@@ -83,20 +81,18 @@ class JobProcessor:
                 self.storage.update_job_field(
                     self.job.id, "retry_count", self.job.retry_count
                 )
-                self.storage.set_job_state(
-                    self.job.id, final_state
-                )  # No expected_old_state for re-enqueue
-            else:
-                self.storage.set_job_state(
-                    self.job.id, final_state, expected_old_state=ProcessingState.NAME
-                )
-
+            
+            # The set_job_state method will handle moving the job from processing back to a queue
+            self.storage.set_job_state(
+                self.job.id, final_state, expected_old_state=ProcessingState.NAME
+            )
             # --- END FILTER INTEGRATION ---
 
         finally:
-            # 5. Acknowledge completion only if job is truly finished
-            if isinstance(final_state, SucceededState) or (
-                isinstance(final_state, FailedState)
-                and self.job.retry_count >= self.filters[0].attempts
-            ):
+            # 5. Acknowledge completion. Acknowledging removes the job from the
+            # processing list. This should only happen for jobs that have reached
+            # a terminal state (Succeeded, Failed). If a job is re-enqueued for
+            # retry, the set_job_state operation is responsible for moving it from
+            # the processing list back to a queue.
+            if final_state and not isinstance(final_state, EnqueuedState):
                 self.storage.acknowledge(self.job.id)
