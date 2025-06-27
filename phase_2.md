@@ -165,7 +165,7 @@ class BackgroundJobClient:
         func_name = target_func.__name__
         serialized_args = self.serializer.serialize_args(target_func, *args, **kwargs)
         
-        scheduled_state = ScheduledState(enqueue_at, datetime.utcnow())
+        scheduled_state = ScheduledState(enqueue_at, datetime.now(UTC))
 
         job = Job(
             target_module=module_name,
@@ -236,7 +236,7 @@ class Worker:
         if not isinstance(storage, RedisStorage): # Phase 2 only supports Redis
             return
 
-        now_timestamp = datetime.utcnow().timestamp()
+        now_timestamp = datetime.now(UTC).timestamp()
         
         while True:
             # Using the Lua script to atomically move one job
@@ -338,7 +338,7 @@ class Worker:
             return # Another worker is handling it
 
         try:
-            now = datetime.utcnow()
+            now = datetime.now(UTC)
             recurring_job_ids = self.storage.redis_client.smembers("pytaskflow:recurring-jobs:ids")
             
             for job_id_bytes in recurring_job_ids:
