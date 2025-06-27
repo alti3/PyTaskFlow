@@ -170,7 +170,7 @@ class DisableConcurrentExecution(JobFilter):
             # Could not acquire lock, another job is running. Reschedule this one.
             performing_context.canceled = True
             performing_context.next_state = ScheduledState(
-                enqueue_at=datetime.utcnow() + timedelta(seconds=60),
+                enqueue_at=datetime.now(UTC) + timedelta(seconds=60),
                 reason=f"Could not acquire lock on resource: {formatted_key}"
             )
         else:

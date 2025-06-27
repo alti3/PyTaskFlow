@@ -392,7 +392,7 @@ class RedisStorage(JobStorage):
         server_data = {
             "worker_count": worker_count,
             "queues": ",".join(queues),
-            "heartbeat": datetime.utcnow().isoformat()
+            "heartbeat": datetime.now(UTC).isoformat()
         }
         # Set with an expiry to automatically remove dead servers
         self.redis_client.hset(server_key, mapping=server_data)

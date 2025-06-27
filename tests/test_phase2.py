@@ -1,4 +1,3 @@
-
 import pytest
 import time
 import json
@@ -100,7 +99,7 @@ def test_redis_storage_set_job_state(redis_storage, redis_client):
     assert success
     retrieved_job = redis_storage.get_job_data(job.id)
     assert retrieved_job.state_name == SucceededState.NAME
-    assert json.loads(retrieved_job.state_data["result"]) == succeeded_state.serialize_data()["result"]
+    assert retrieved_job.state_data["result"] == succeeded_state.serialize_data()["result"]
 
     # Test failed state change due to expected_old_state mismatch
     failed_state = FailedState("Error", "msg", "details")
@@ -233,7 +232,7 @@ def test_client_add_remove_trigger_recurring(client, redis_storage, redis_client
 # Test Worker with RedisStorage (Scheduler functionality)
 def test_worker_processes_scheduled_job(redis_storage, json_serializer, redis_client):
     # Schedule a job to be enqueued very soon
-    enqueue_at = datetime.utcnow() + timedelta(seconds=1)
+    enqueue_at = datetime.now(UTC) + timedelta(seconds=1)
     job = Job(
         target_module="tests.test_tasks",
         target_function="success_task",
@@ -265,8 +264,14 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
         kwargs=json.dumps({}),
         state_name=""
     )
-    # Schedule to run every second for testing
-    redis_storage.add_recurring_job(recurring_job_id, job_template, "* * * * * *") # Every second
+    # Schedule to run every minute for testing (5-field cron format)
+    redis_storage.add_recurring_job(recurring_job_id, job_template, "* * * * *") # Every minute
+    
+    # Manually set last_execution to 2 minutes ago to ensure the job is due
+    stored_data = redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
+    data = json.loads(stored_data.decode())
+    data["last_execution"] = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
+    redis_client.hset("pytaskflow:recurring-jobs", recurring_job_id, json.dumps(data))
 
     worker = Worker(redis_storage, json_serializer, queues=["default"], scheduler_poll_interval_seconds=0.5)
     
@@ -276,13 +281,15 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
     worker._shutdown_requested = True
     worker_thread.join()
 
-    # Check if at least one job was enqueued and processed
-    # This is a bit tricky to assert exact count due to timing, but we can check for success
-    # We'll check the last_execution time in the recurring job data
+    # Check if the recurring job was processed and last_execution was updated
     stored_data = redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
     assert stored_data is not None
     data = json.loads(stored_data.decode())
     assert data["last_execution"] is not None
+    
+    # Verify the last_execution was updated to a recent time (within the last 5 seconds)
+    last_execution = datetime.fromisoformat(data["last_execution"])
+    assert (datetime.now(UTC) - last_execution).total_seconds() < 5
 
     # We can't easily get the job_id of the triggered job, so we'll check the queue directly
     # The worker processes jobs, so the queue should be empty or nearly empty

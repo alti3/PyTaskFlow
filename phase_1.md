@@ -37,7 +37,7 @@ class Job:
     Inspired by Hangfire.Common.Job.
     """
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=datetime.now(UTC))
     
     # Target function information
     target_module: str
