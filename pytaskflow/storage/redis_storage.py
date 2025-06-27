@@ -173,6 +173,19 @@ class RedisStorage(JobStorage):
         """
         source_queues = [f"pytaskflow:queue:{q}" for q in queues]
         processing_list = "pytaskflow:queue:processing"
+
+        """
+        This hybrid approach:
+        1 - First tries the atomic Lua script for immediate job availability (no blocking)
+        2 - Falls back to brpop for blocking behavior when no jobs are immediately available
+        3 - Maintains atomicity for the common case while providing efficient blocking for the timeout case
+        
+        The key improvements:
+        - No polling loop - more efficient CPU usage
+        - Atomic operation when jobs are available
+        - Proper blocking behavior when waiting for jobs
+        - Best of both worlds - atomicity + efficiency
+        """
         
         # Try immediate atomic pop first
         result = self.atomic_dequeue_script(
