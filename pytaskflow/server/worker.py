@@ -72,8 +72,7 @@ class Worker:
                 break  # No more jobs to enqueue
 
             # The script returns a list of job IDs, iterate through them
-            for job_id_bytes in job_ids_result:
-                job_id = job_id_bytes.decode() if isinstance(job_id_bytes, bytes) else job_id_bytes
+            for job_id in job_ids_result:
                 logger.info(
                     f"[{self.worker_id}] Moved scheduled job {job_id} to enqueued."
                 )
@@ -94,8 +93,8 @@ class Worker:
                 "pytaskflow:recurring-jobs:ids"
             )
 
-            for job_id_bytes in recurring_job_ids:
-                job_id = job_id_bytes.decode()
+            for job_id in recurring_job_ids:
+                #job_id = job_id_bytes.decode()
 
                 # Use a distributed lock per job to handle updates atomically
                 job_lock_key = f"pytaskflow:lock:recurring-job:{job_id}"
@@ -111,7 +110,7 @@ class Worker:
                     if not data_str:
                         continue
 
-                    data = json.loads(data_str.decode())
+                    data = json.loads(data_str)
 
                     last_execution_str = data.get("last_execution")
                     last_execution = (
