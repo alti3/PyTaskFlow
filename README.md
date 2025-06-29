@@ -102,6 +102,50 @@ pytaskflow/
     *   `scheduled_at`: For delayed/recurring jobs.
     *   `recurring_job_id`: For instances of recurring jobs.
 
+**Job Processing Flow:**
+
+The following diagram illustrates how jobs flow through the system from dequeue to completion:
+
+```mermaid
+sequenceDiagram
+    participant Worker
+    participant Storage
+    participant Queue
+    participant Processing
+
+    Worker->>Storage: dequeue()
+    alt Redis storage
+        Storage->>Queue: atomic_brpop_and_move (Lua script)
+        Queue-->>Storage: job_id
+        Storage->>Processing: move job to processing queue
+    else Memory storage
+        Storage->>Queue: pop job_id
+        Queue-->>Storage: job_id
+        Storage->>Processing: mark job as processing
+    end
+    Storage-->>Worker: Job object
+
+    Worker->>Worker: process job
+
+    alt Job fails and retry is allowed
+        Worker->>Storage: set_job_state(job_id, EnqueuedState, expected_old_state=Processing)
+        Storage->>Processing: remove job from processing
+        Processing->>Queue: push job to queue
+        Storage->>Queue: notify waiting threads (Memory) / atomic move (Redis)
+    else Job reaches terminal state
+        Worker->>Storage: set_job_state(job_id, FinalState, expected_old_state=Processing)
+        Storage->>Processing: remove job from processing
+        Storage->>Worker: acknowledge job
+    end
+
+    alt Job succeeds with continuation
+        Worker->>Storage: set_job_state(job_id, SucceededState, expected_old_state=Processing)
+        Storage->>Worker: acknowledge job
+        Worker->>Storage: trigger continuations for parent job
+        Storage->>Queue: enqueue continuation jobs
+    end
+```
+
 2.  **`pytaskflow.serialization`:**
     *   **Base Serializer (`BaseSerializer` ABC):**
         *   `serialize_job(job: Job) -> str`
