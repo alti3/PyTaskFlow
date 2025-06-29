@@ -86,9 +86,7 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     # Check if job data is stored in Redis
     stored_job_data = redis_client.hgetall(f"pytaskflow:job:{job_id}")
     assert stored_job_data["target_function"] == "success_task"
-    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == [
-        job_id
-    ]
+    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == [job_id]
 
     dequeued_job = redis_storage.dequeue(["default"], timeout_seconds=1)
     assert dequeued_job.id == job.id
@@ -97,9 +95,7 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     )  # State should change to Processing
 
     # Check if job is moved to processing list
-    assert redis_client.lrange(f"pytaskflow:queue:processing", 0, -1) == [
-        job_id
-    ]
+    assert redis_client.lrange(f"pytaskflow:queue:processing", 0, -1) == [job_id]
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue
@@ -353,12 +349,16 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
     # To verify a job was processed, we'd need to inspect logs or a more complex state tracking
     # For now, the `last_execution` update is a good indicator that the scheduler ran.
 
+
 def test_redis_storage_dequeue_prioritizes_queues(redis_storage, redis_client):
     # 1. Enqueue a job to a lower-priority queue first
     low_prio_job = Job(
         target_module="tests.test_tasks",
         target_function="success_task",
-        args="[]", kwargs="{}", state_name="Enqueued", queue="low"
+        args="[]",
+        kwargs="{}",
+        state_name="Enqueued",
+        queue="low",
     )
     redis_storage.enqueue(low_prio_job)
 
@@ -366,7 +366,10 @@ def test_redis_storage_dequeue_prioritizes_queues(redis_storage, redis_client):
     high_prio_job = Job(
         target_module="tests.test_tasks",
         target_function="success_task",
-        args="[]", kwargs="{}", state_name="Enqueued", queue="critical"
+        args="[]",
+        kwargs="{}",
+        state_name="Enqueued",
+        queue="critical",
     )
     redis_storage.enqueue(high_prio_job)
 

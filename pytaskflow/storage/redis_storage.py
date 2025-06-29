@@ -12,24 +12,29 @@ from ..common.states import BaseState, ProcessingState, EnqueuedState
 
 logger = logging.getLogger(__name__)
 
+
 class RedisStorage(JobStorage):
     def __init__(self, connection_pool=None, redis_client=None):
         if redis_client:
             self.redis_client = redis_client
             # Ensure decode_responses is enabled if not already set
-            if not getattr(self.redis_client, 'decode_responses', False):
+            if not getattr(self.redis_client, "decode_responses", False):
                 # Create a new client with decode_responses=True using the same connection pool
                 self.redis_client = redis.Redis(
                     connection_pool=self.redis_client.connection_pool,
-                    decode_responses=True
+                    decode_responses=True,
                 )
         elif connection_pool:
-            self.redis_client = redis.Redis(connection_pool=connection_pool, decode_responses=True)
+            self.redis_client = redis.Redis(
+                connection_pool=connection_pool, decode_responses=True
+            )
         else:
-            self.redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+            self.redis_client = redis.Redis(
+                host="localhost", port=6379, db=0, decode_responses=True
+            )
 
         # Lua script for moving scheduled jobs to an enqueued state
-        self.move_to_enqueued_script = self.redis_client.register_script('''
+        self.move_to_enqueued_script = self.redis_client.register_script("""
             local scheduled_key = KEYS[1]
             local now_timestamp = tonumber(ARGV[1])
             local state_name = ARGV[2]
@@ -49,7 +54,7 @@ class RedisStorage(JobStorage):
                 end
             end
             return due_jobs
-        ''')
+        """)
 
     def _serialize_job_for_storage(self, job: Job) -> dict:
         job_dict = {}
@@ -67,11 +72,11 @@ class RedisStorage(JobStorage):
         for key, value in job_data.items():
             # Ensure key is a string (decode if it's bytes)
             if isinstance(key, bytes):
-                key = key.decode('utf-8')
+                key = key.decode("utf-8")
             # Ensure value is a string (decode if it's bytes)
             if isinstance(value, bytes):
-                value = value.decode('utf-8')
-            
+                value = value.decode("utf-8")
+
             if key == "created_at":
                 job_dict[key] = datetime.fromisoformat(value)
             elif key == "state_data":
@@ -105,11 +110,17 @@ class RedisStorage(JobStorage):
             pipe.execute()
         return job.id
 
-    def add_recurring_job(self, recurring_job_id: str, job_template: Job, cron_expression: str):
+    def add_recurring_job(
+        self, recurring_job_id: str, job_template: Job, cron_expression: str
+    ):
         job_dict = self._serialize_job_for_storage(job_template)
         data = {"job": job_dict, "cron": cron_expression, "last_execution": None}
         with self.redis_client.pipeline() as pipe:
-            pipe.hset("pytaskflow:recurring-jobs", recurring_job_id, json.dumps(data, default=str))
+            pipe.hset(
+                "pytaskflow:recurring-jobs",
+                recurring_job_id,
+                json.dumps(data, default=str),
+            )
             pipe.sadd("pytaskflow:recurring-jobs:ids", recurring_job_id)
             pipe.execute()
 
@@ -150,14 +161,16 @@ class RedisStorage(JobStorage):
             for queue in queues:
                 source_queue = f"pytaskflow:queue:{queue}"
                 try:
-                    job_id = self.redis_client.brpoplpush(source_queue, processing_list, timeout=1)
+                    job_id = self.redis_client.brpoplpush(
+                        source_queue, processing_list, timeout=1
+                    )
                     if job_id:
-                        break # Found a job, exit the inner loop
+                        break  # Found a job, exit the inner loop
                 except redis.exceptions.TimeoutError:
-                    continue # Go to the next queue
+                    continue  # Go to the next queue
 
             if job_id:
-                break # Exit the outer loop to process the job
+                break  # Exit the outer loop to process the job
 
             # Check if the total timeout has been exceeded
             if (time.monotonic() - start_time) > timeout_seconds:
@@ -165,7 +178,7 @@ class RedisStorage(JobStorage):
 
         # Decode job_id if it's bytes
         if isinstance(job_id, bytes):
-            job_id = job_id.decode('utf-8')
+            job_id = job_id.decode("utf-8")
 
         processing_state = ProcessingState("server-redis", "worker-1")
         self.set_job_state(job_id, processing_state)
@@ -174,9 +187,11 @@ class RedisStorage(JobStorage):
     def acknowledge(self, job_id: str) -> None:
         self.redis_client.lrem("pytaskflow:queue:processing", 1, job_id)
 
-    def set_job_state(self, job_id: str, state: BaseState, expected_old_state: Optional[str] = None) -> bool:
+    def set_job_state(
+        self, job_id: str, state: BaseState, expected_old_state: Optional[str] = None
+    ) -> bool:
         job_key = f"pytaskflow:job:{job_id}"
-        
+
         if expected_old_state:
             # Use optimistic locking with WATCH/MULTI/EXEC
             with self.redis_client.pipeline(transaction=True) as pipe:
@@ -186,15 +201,19 @@ class RedisStorage(JobStorage):
                         current_state = pipe.hget(job_key, "state_name")
                         # Decode if bytes
                         if isinstance(current_state, bytes):
-                            current_state = current_state.decode('utf-8')
-                        
+                            current_state = current_state.decode("utf-8")
+
                         if current_state != expected_old_state:
                             pipe.unwatch()
                             return False
 
                         pipe.multi()
                         pipe.hset(job_key, "state_name", state.name)
-                        pipe.hset(job_key, "state_data", json.dumps(state.serialize_data(), default=str))
+                        pipe.hset(
+                            job_key,
+                            "state_data",
+                            json.dumps(state.serialize_data(), default=str),
+                        )
 
                         # If job is being re-enqueued for retry, move it from processing back to its queue
                         if isinstance(state, EnqueuedState):
@@ -213,7 +232,11 @@ class RedisStorage(JobStorage):
             # Simple case without optimistic locking
             with self.redis_client.pipeline() as pipe:
                 pipe.hset(job_key, "state_name", state.name)
-                pipe.hset(job_key, "state_data", json.dumps(state.serialize_data(), default=str))
+                pipe.hset(
+                    job_key,
+                    "state_data",
+                    json.dumps(state.serialize_data(), default=str),
+                )
 
                 # If job is being re-enqueued for retry, move it from processing back to its queue
                 if isinstance(state, EnqueuedState):

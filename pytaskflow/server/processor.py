@@ -81,7 +81,7 @@ class JobProcessor:
                 self.storage.update_job_field(
                     self.job.id, "retry_count", self.job.retry_count
                 )
-            
+
             # The set_job_state method will handle moving the job from processing back to a queue
             self.storage.set_job_state(
                 self.job.id, final_state, expected_old_state=ProcessingState.NAME

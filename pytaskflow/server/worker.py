@@ -94,8 +94,6 @@ class Worker:
             )
 
             for job_id in recurring_job_ids:
-                #job_id = job_id_bytes.decode()
-
                 # Use a distributed lock per job to handle updates atomically
                 job_lock_key = f"pytaskflow:lock:recurring-job:{job_id}"
                 if not self.storage.redis_client.set(

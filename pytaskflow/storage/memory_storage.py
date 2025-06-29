@@ -122,7 +122,7 @@ class MemoryStorage(JobStorage):
             if isinstance(state, EnqueuedState):
                 if job_id in self._processing:
                     del self._processing[job_id]
-                
+
                 if job.queue not in self._queues:
                     self._queues[job.queue] = deque()
                 self._queues[job.queue].append(job.id)
