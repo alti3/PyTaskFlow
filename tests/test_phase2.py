@@ -95,7 +95,7 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     )  # State should change to Processing
 
     # Check if job is moved to processing list
-    assert redis_client.lrange(f"pytaskflow:queue:processing", 0, -1) == [job_id]
+    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == [job_id]
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue
@@ -145,7 +145,7 @@ def test_redis_storage_acknowledge(redis_storage, redis_client):
 
     redis_storage.acknowledge(job.id)
     # Acknowledged jobs are removed from processing list
-    assert redis_client.lrange(f"pytaskflow:queue:processing", 0, -1) == []
+    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == []
     assert redis_storage.get_job_data(job.id) is not None  # Job data should still exist
 
 
