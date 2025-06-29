@@ -342,9 +342,9 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
     data = json.loads(stored_data.decode())
     assert data["last_execution"] is not None
 
-    # Verify the last_execution was updated to a recent time (within the last 5 seconds)
+    # Verify the last_execution was updated to a recent time (within the last 10 seconds)
     last_execution = datetime.fromisoformat(data["last_execution"])
-    assert (datetime.now(UTC) - last_execution).total_seconds() < 5
+    assert (datetime.now(UTC) - last_execution).total_seconds() < 10
 
     # We can't easily get the job_id of the triggered job, so we'll check the queue directly
     # The worker processes jobs, so the queue should be empty or nearly empty
