@@ -59,22 +59,23 @@ class Worker:
         now_timestamp = datetime.now(UTC).timestamp()
 
         while True:
-            # Using the Lua script to atomically move one job
-            job_id_bytes = storage.move_to_enqueued_script(
+            # Using the Lua script to atomically move jobs
+            job_ids_result = storage.move_to_enqueued_script(
                 keys=["pytaskflow:scheduled"],
                 args=[
                     now_timestamp,
                     EnqueuedState.NAME,
-                    "default",
-                ],  # Assume default queue for now
+                ],
             )
 
-            if not job_id_bytes:
+            if not job_ids_result:
                 break  # No more jobs to enqueue
 
-            logger.info(
-                f"[{self.worker_id}] Moved scheduled job {job_id_bytes.decode()} to enqueued."
-            )
+            # The script returns a list of job IDs, iterate through them
+            for job_id in job_ids_result:
+                logger.info(
+                    f"[{self.worker_id}] Moved scheduled job {job_id} to enqueued."
+                )
 
     def _enqueue_due_recurring_jobs(self):
         # This entire method should be protected by a distributed lock to ensure only one worker
@@ -92,9 +93,7 @@ class Worker:
                 "pytaskflow:recurring-jobs:ids"
             )
 
-            for job_id_bytes in recurring_job_ids:
-                job_id = job_id_bytes.decode()
-
+            for job_id in recurring_job_ids:
                 # Use a distributed lock per job to handle updates atomically
                 job_lock_key = f"pytaskflow:lock:recurring-job:{job_id}"
                 if not self.storage.redis_client.set(
@@ -109,7 +108,7 @@ class Worker:
                     if not data_str:
                         continue
 
-                    data = json.loads(data_str.decode())
+                    data = json.loads(data_str)
 
                     last_execution_str = data.get("last_execution")
                     last_execution = (

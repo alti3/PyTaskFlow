@@ -117,8 +117,17 @@ class MemoryStorage(JobStorage):
 
             job.state_name = state.name
             job.state_data = state.serialize_data()
-            if state.name == EnqueuedState.NAME:
-                self._condition.notify()  # Notify if job is re-enqueued
+
+            # If re-enqueued (for a retry), move it from processing back to a queue
+            if isinstance(state, EnqueuedState):
+                if job_id in self._processing:
+                    del self._processing[job_id]
+
+                if job.queue not in self._queues:
+                    self._queues[job.queue] = deque()
+                self._queues[job.queue].append(job.id)
+                self._condition.notify()
+
             return True
 
     def get_job_data(self, job_id: str) -> Optional[Job]:

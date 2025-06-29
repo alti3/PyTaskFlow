@@ -1,53 +1,62 @@
 # pytaskflow/storage/redis_storage.py
 import redis
 import json
-import uuid
+import logging
 from typing import Optional, List, Any
 from datetime import datetime, UTC
+import time
 
 from .base import JobStorage
 from ..common.job import Job
 from ..common.states import BaseState, ProcessingState, EnqueuedState
+
+logger = logging.getLogger(__name__)
 
 
 class RedisStorage(JobStorage):
     def __init__(self, connection_pool=None, redis_client=None):
         if redis_client:
             self.redis_client = redis_client
+            # Ensure decode_responses is enabled if not already set
+            if not getattr(self.redis_client, "decode_responses", False):
+                # Create a new client with decode_responses=True using the same connection pool
+                self.redis_client = redis.Redis(
+                    connection_pool=self.redis_client.connection_pool,
+                    decode_responses=True,
+                )
         elif connection_pool:
-            self.redis_client = redis.Redis(connection_pool=connection_pool)
+            self.redis_client = redis.Redis(
+                connection_pool=connection_pool, decode_responses=True
+            )
         else:
-            self.redis_client = redis.Redis(host="localhost", port=6379, db=0)
+            self.redis_client = redis.Redis(
+                host="localhost", port=6379, db=0, decode_responses=True
+            )
 
-        # Load Lua script for moving scheduled jobs
+        # Lua script for moving scheduled jobs to an enqueued state
         self.move_to_enqueued_script = self.redis_client.register_script("""
             local scheduled_key = KEYS[1]
             local now_timestamp = tonumber(ARGV[1])
             local state_name = ARGV[2]
-            local queue = ARGV[3]
-            
-            -- Get jobs that are due (score <= now_timestamp)
-            local due_jobs = redis.call('ZRANGEBYSCORE', scheduled_key, '-inf', now_timestamp, 'LIMIT', 0, 1)
-            
+            local due_jobs = redis.call('ZRANGEBYSCORE', scheduled_key, '-inf', now_timestamp, 'LIMIT', 0, 100)
             if #due_jobs == 0 then
                 return nil
             end
-            
-            local job_id = due_jobs[1]
-            
-            -- Remove from scheduled set
-            redis.call('ZREM', scheduled_key, job_id)
-            
-            -- Update job state and add to queue
-            redis.call('HSET', 'pytaskflow:job:' .. job_id, 'state_name', state_name)
-            redis.call('HSET', 'pytaskflow:job:' .. job_id, 'state_data', '{"queue":"' .. queue .. '"}')
-            redis.call('LPUSH', 'pytaskflow:queue:' .. queue, job_id)
-            
-            return job_id
+            for i=1, #due_jobs do
+                local job_id = due_jobs[i]
+                local job_key = 'pytaskflow:job:' .. job_id
+                local queue = redis.call('HGET', job_key, 'queue')
+                if not queue then queue = 'default' end
+                if redis.call('ZREM', scheduled_key, job_id) > 0 then
+                    redis.call('HSET', job_key, 'state_name', state_name)
+                    redis.call('HSET', job_key, 'state_data', '{"queue":"' .. queue .. '"}')
+                    redis.call('LPUSH', 'pytaskflow:queue:' .. queue, job_id)
+                end
+            end
+            return due_jobs
         """)
 
     def _serialize_job_for_storage(self, job: Job) -> dict:
-        """Convert job to a dict with all values as strings for Redis storage."""
         job_dict = {}
         for key, value in job.__dict__.items():
             if isinstance(value, datetime):
@@ -59,21 +68,26 @@ class RedisStorage(JobStorage):
         return job_dict
 
     def _deserialize_job_from_storage(self, job_data: dict) -> Job:
-        """Convert Redis hash data back to Job object."""
         job_dict = {}
         for key, value in job_data.items():
-            key_str = key.decode() if isinstance(key, bytes) else key
-            value_str = value.decode() if isinstance(value, bytes) else value
+            # Ensure key is a string (decode if it's bytes)
+            if isinstance(key, bytes):
+                key = key.decode("utf-8")
+            # Ensure value is a string (decode if it's bytes)
+            if isinstance(value, bytes):
+                value = value.decode("utf-8")
 
-            if key_str == "created_at":
-                job_dict[key_str] = datetime.fromisoformat(value_str)
-            elif key_str == "state_data":
-                job_dict[key_str] = json.loads(value_str)
-            elif key_str == "retry_count":
-                job_dict[key_str] = int(value_str)
+            if key == "created_at":
+                job_dict[key] = datetime.fromisoformat(value)
+            elif key == "state_data":
+                try:
+                    job_dict[key] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    job_dict[key] = {}
+            elif key == "retry_count":
+                job_dict[key] = int(value)
             else:
-                job_dict[key_str] = value_str
-
+                job_dict[key] = value
         return Job(**job_dict)
 
     def enqueue(self, job: Job) -> str:
@@ -88,10 +102,7 @@ class RedisStorage(JobStorage):
     def schedule(self, job: Job, enqueue_at: datetime) -> str:
         job_key = f"pytaskflow:job:{job.id}"
         scheduled_key = "pytaskflow:scheduled"
-
-        # Convert datetime to UNIX timestamp for the score
         score = enqueue_at.timestamp()
-
         with self.redis_client.pipeline() as pipe:
             job_dict = self._serialize_job_for_storage(job)
             pipe.hset(job_key, mapping=job_dict)
@@ -102,15 +113,14 @@ class RedisStorage(JobStorage):
     def add_recurring_job(
         self, recurring_job_id: str, job_template: Job, cron_expression: str
     ):
-        # Convert job template to dict and handle datetime serialization
-        job_dict = job_template.__dict__.copy()
-        if isinstance(job_dict.get("created_at"), datetime):
-            job_dict["created_at"] = job_dict["created_at"].isoformat()
-
+        job_dict = self._serialize_job_for_storage(job_template)
         data = {"job": job_dict, "cron": cron_expression, "last_execution": None}
-
         with self.redis_client.pipeline() as pipe:
-            pipe.hset("pytaskflow:recurring-jobs", recurring_job_id, json.dumps(data))
+            pipe.hset(
+                "pytaskflow:recurring-jobs",
+                recurring_job_id,
+                json.dumps(data, default=str),
+            )
             pipe.sadd("pytaskflow:recurring-jobs:ids", recurring_job_id)
             pipe.execute()
 
@@ -124,47 +134,54 @@ class RedisStorage(JobStorage):
         data_str = self.redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
         if not data_str:
             return
-
-        data = json.loads(data_str.decode())
+        data = json.loads(data_str)
         job_dict = data["job"]
-
-        # Create a new job instance from the template
+        deserialized_job = self._deserialize_job_from_storage(job_dict)
         job_instance = Job(
-            target_module=job_dict["target_module"],
-            target_function=job_dict["target_function"],
-            args=job_dict["args"],
-            kwargs=job_dict["kwargs"],
+            target_module=deserialized_job.target_module,
+            target_function=deserialized_job.target_function,
+            args=deserialized_job.args,
+            kwargs=deserialized_job.kwargs,
             state_name=EnqueuedState.NAME,
             state_data=EnqueuedState().serialize_data(),
-            queue=job_dict.get("queue", "default"),
+            queue=deserialized_job.queue,
         )
         self.enqueue(job_instance)
 
     def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
-        # Use BRPOPLPUSH to atomically move job from queue to processing
-        if timeout_seconds == 0:
-            timeout_seconds = None
+        processing_list = "pytaskflow:queue:processing"
+        job_id = None
 
-        queue_keys = [f"pytaskflow:queue:{q}" for q in queues]
-        result = self.redis_client.brpop(queue_keys, timeout=timeout_seconds)
+        # The `brpoplpush` command is the correct primitive. We loop through the queues
+        # to provide prioritized fetching. A short timeout makes the worker responsive.
+        # Note: A single `brpoplpush` with a long timeout would "starve" other queues.
+        # This iterative approach is the standard, correct pattern.
+        start_time = time.monotonic()
+        while True:
+            for queue in queues:
+                source_queue = f"pytaskflow:queue:{queue}"
+                try:
+                    job_id = self.redis_client.brpoplpush(
+                        source_queue, processing_list, timeout=1
+                    )
+                    if job_id:
+                        break  # Found a job, exit the inner loop
+                except redis.exceptions.TimeoutError:
+                    continue  # Go to the next queue
 
-        if not result:
-            return None
+            if job_id:
+                break  # Exit the outer loop to process the job
 
-        queue_key, job_id_bytes = result
-        job_id = job_id_bytes.decode()
+            # Check if the total timeout has been exceeded
+            if (time.monotonic() - start_time) > timeout_seconds:
+                return None
 
-        # Move to processing and update state
-        with self.redis_client.pipeline() as pipe:
-            pipe.lpush("pytaskflow:queue:processing", job_id)
-            pipe.hset(f"pytaskflow:job:{job_id}", "state_name", ProcessingState.NAME)
-            pipe.hset(
-                f"pytaskflow:job:{job_id}",
-                "state_data",
-                json.dumps({"server_id": "server-mvp", "worker_id": "worker-1"}),
-            )
-            pipe.execute()
+        # Decode job_id if it's bytes
+        if isinstance(job_id, bytes):
+            job_id = job_id.decode("utf-8")
 
+        processing_state = ProcessingState("server-redis", "worker-1")
+        self.set_job_state(job_id, processing_state)
         return self.get_job_data(job_id)
 
     def acknowledge(self, job_id: str) -> None:
@@ -175,26 +192,67 @@ class RedisStorage(JobStorage):
     ) -> bool:
         job_key = f"pytaskflow:job:{job_id}"
 
-        # If expected_old_state is specified, check it first
         if expected_old_state:
-            current_state = self.redis_client.hget(job_key, "state_name")
-            if not current_state or current_state.decode() != expected_old_state:
-                return False
+            # Use optimistic locking with WATCH/MULTI/EXEC
+            with self.redis_client.pipeline(transaction=True) as pipe:
+                while True:
+                    try:
+                        pipe.watch(job_key)
+                        current_state = pipe.hget(job_key, "state_name")
+                        # Decode if bytes
+                        if isinstance(current_state, bytes):
+                            current_state = current_state.decode("utf-8")
 
-        # Update state
-        with self.redis_client.pipeline() as pipe:
-            pipe.hset(job_key, "state_name", state.name)
-            pipe.hset(job_key, "state_data", json.dumps(state.serialize_data()))
-            pipe.execute()
+                        if current_state != expected_old_state:
+                            pipe.unwatch()
+                            return False
 
-        return True
+                        pipe.multi()
+                        pipe.hset(job_key, "state_name", state.name)
+                        pipe.hset(
+                            job_key,
+                            "state_data",
+                            json.dumps(state.serialize_data(), default=str),
+                        )
+
+                        # If job is being re-enqueued for retry, move it from processing back to its queue
+                        if isinstance(state, EnqueuedState):
+                            job_data = self.get_job_data(job_id)
+                            if job_data:
+                                pipe.lrem("pytaskflow:queue:processing", 1, job_id)
+                                pipe.lpush(f"pytaskflow:queue:{job_data.queue}", job_id)
+
+                        pipe.execute()
+                        break
+                    except redis.exceptions.WatchError:
+                        # Retry the operation
+                        continue
+            return True
+        else:
+            # Simple case without optimistic locking
+            with self.redis_client.pipeline() as pipe:
+                pipe.hset(job_key, "state_name", state.name)
+                pipe.hset(
+                    job_key,
+                    "state_data",
+                    json.dumps(state.serialize_data(), default=str),
+                )
+
+                # If job is being re-enqueued for retry, move it from processing back to its queue
+                if isinstance(state, EnqueuedState):
+                    job_data = self.get_job_data(job_id)
+                    if job_data:
+                        pipe.lrem("pytaskflow:queue:processing", 1, job_id)
+                        pipe.lpush(f"pytaskflow:queue:{job_data.queue}", job_id)
+
+                pipe.execute()
+            return True
 
     def get_job_data(self, job_id: str) -> Optional[Job]:
         job_key = f"pytaskflow:job:{job_id}"
         job_data = self.redis_client.hgetall(job_key)
         if not job_data:
             return None
-
         return self._deserialize_job_from_storage(job_data)
 
     def update_job_field(self, job_id: str, field_name: str, value: Any) -> None:
@@ -205,5 +263,4 @@ class RedisStorage(JobStorage):
             value = value.isoformat()
         else:
             value = str(value)
-
         self.redis_client.hset(job_key, field_name, value)

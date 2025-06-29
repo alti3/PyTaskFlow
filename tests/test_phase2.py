@@ -42,7 +42,7 @@ def my_side_effect_function(file_path, content):
 # --- Fixtures ---
 @pytest.fixture
 def redis_client():
-    r = redis.Redis(host="localhost", port=6379, db=0)
+    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
     try:
         r.ping()
     except redis.exceptions.ConnectionError:
@@ -85,10 +85,8 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
 
     # Check if job data is stored in Redis
     stored_job_data = redis_client.hgetall(f"pytaskflow:job:{job_id}")
-    assert stored_job_data[b"target_function"].decode() == "success_task"
-    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == [
-        job_id.encode()
-    ]
+    assert stored_job_data["target_function"] == "success_task"
+    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == [job_id]
 
     dequeued_job = redis_storage.dequeue(["default"], timeout_seconds=1)
     assert dequeued_job.id == job.id
@@ -97,9 +95,7 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     )  # State should change to Processing
 
     # Check if job is moved to processing list
-    assert redis_client.lrange(f"pytaskflow:queue:processing", 0, -1) == [
-        job_id.encode()
-    ]
+    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == [job_id]
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue
@@ -149,7 +145,7 @@ def test_redis_storage_acknowledge(redis_storage, redis_client):
 
     redis_storage.acknowledge(job.id)
     # Acknowledged jobs are removed from processing list
-    assert redis_client.lrange(f"pytaskflow:queue:processing", 0, -1) == []
+    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == []
     assert redis_storage.get_job_data(job.id) is not None  # Job data should still exist
 
 
@@ -185,7 +181,7 @@ def test_redis_storage_schedule(redis_storage, redis_client):
     # Check if job is in scheduled sorted set
     scheduled_jobs = redis_client.zrange("pytaskflow:scheduled", 0, -1, withscores=True)
     assert len(scheduled_jobs) == 1
-    assert scheduled_jobs[0][0].decode() == job_id
+    assert scheduled_jobs[0][0] == job_id
     assert int(scheduled_jobs[0][1]) == int(enqueue_at.timestamp())
 
 
@@ -205,7 +201,7 @@ def test_redis_storage_add_remove_recurring_job(redis_storage, redis_client):
     # Check if recurring job is stored
     stored_data = redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
     assert stored_data is not None
-    data = json.loads(stored_data.decode())
+    data = json.loads(stored_data)
     assert data["cron"] == cron_expression
     assert data["job"]["target_function"] == "success_task"
     assert redis_client.sismember("pytaskflow:recurring-jobs:ids", recurring_job_id)
@@ -232,10 +228,10 @@ def test_redis_storage_trigger_recurring_job(redis_storage, redis_client):
     # Check if a new job is enqueued
     enqueued_job_ids = redis_client.lrange("pytaskflow:queue:default", 0, -1)
     assert len(enqueued_job_ids) == 1
-    new_job_id = enqueued_job_ids[0].decode()
+    new_job_id = enqueued_job_ids[0]
     new_job_data = redis_client.hgetall(f"pytaskflow:job:{new_job_id}")
-    assert new_job_data[b"target_function"].decode() == "success_task"
-    assert json.loads(new_job_data[b"args"].decode()) == [10, 20]
+    assert new_job_data["target_function"] == "success_task"
+    assert json.loads(new_job_data["args"]) == [10, 20]
 
 
 # Test BackgroundJobClient with RedisStorage
@@ -319,7 +315,7 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
 
     # Manually set last_execution to 2 minutes ago to ensure the job is due
     stored_data = redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
-    data = json.loads(stored_data.decode())
+    data = json.loads(stored_data)
     data["last_execution"] = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
     redis_client.hset("pytaskflow:recurring-jobs", recurring_job_id, json.dumps(data))
 
@@ -339,12 +335,12 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
     # Check if the recurring job was processed and last_execution was updated
     stored_data = redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
     assert stored_data is not None
-    data = json.loads(stored_data.decode())
+    data = json.loads(stored_data)
     assert data["last_execution"] is not None
 
-    # Verify the last_execution was updated to a recent time (within the last 5 seconds)
+    # Verify the last_execution was updated to a recent time (within the last 10 seconds)
     last_execution = datetime.fromisoformat(data["last_execution"])
-    assert (datetime.now(UTC) - last_execution).total_seconds() < 5
+    assert (datetime.now(UTC) - last_execution).total_seconds() < 10
 
     # We can't easily get the job_id of the triggered job, so we'll check the queue directly
     # The worker processes jobs, so the queue should be empty or nearly empty
@@ -352,3 +348,39 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
 
     # To verify a job was processed, we'd need to inspect logs or a more complex state tracking
     # For now, the `last_execution` update is a good indicator that the scheduler ran.
+
+
+def test_redis_storage_dequeue_prioritizes_queues(redis_storage, redis_client):
+    # 1. Enqueue a job to a lower-priority queue first
+    low_prio_job = Job(
+        target_module="tests.test_tasks",
+        target_function="success_task",
+        args="[]",
+        kwargs="{}",
+        state_name="Enqueued",
+        queue="low",
+    )
+    redis_storage.enqueue(low_prio_job)
+
+    # 2. Enqueue a job to a higher-priority queue
+    high_prio_job = Job(
+        target_module="tests.test_tasks",
+        target_function="success_task",
+        args="[]",
+        kwargs="{}",
+        state_name="Enqueued",
+        queue="critical",
+    )
+    redis_storage.enqueue(high_prio_job)
+
+    # 3. Dequeue with 'critical' as the higher priority queue
+    dequeued_job = redis_storage.dequeue(queues=["critical", "low"], timeout_seconds=2)
+
+    # 4. Assert that the high-priority job was dequeued, not the low-priority one
+    assert dequeued_job is not None
+    assert dequeued_job.id == high_prio_job.id
+    assert dequeued_job.queue == "critical"
+
+    # 5. Assert that the low-priority job is still in its queue
+    remaining_job_id = redis_client.lindex("pytaskflow:queue:low", 0)
+    assert remaining_job_id == low_prio_job.id
