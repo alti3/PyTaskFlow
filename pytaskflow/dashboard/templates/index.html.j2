@@ -1,0 +1,17 @@
+{% extends "_layout.html.j2" %}
+
+{% block content %}
+<div class="row">
+    {% for state, count in stats.items() %}
+    <div class="col-md-4">
+        <div class="card text-center mb-3">
+            <div class="card-body">
+                <h5 class="card-title text-capitalize">{{ state }}</h5>
+                <p class="card-text fs-1">{{ count }}</p>
+                <a href="{{ url_for('list_jobs_by_status', status=state) }}" class="btn btn-primary">View Jobs</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

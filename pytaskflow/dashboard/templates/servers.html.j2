@@ -1,0 +1,38 @@
+{% extends "_layout.html.j2" %}
+
+{% block content %}
+    <h1 class="mb-4">Servers</h1>
+
+    <div class="card">
+        <div class="card-body">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Hostname</th>
+                        <th scope="col">PID</th>
+                        <th scope="col">Last Heartbeat</th>
+                        <th scope="col">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if servers %}
+                        {% for server in servers %}
+                            <tr>
+                                <td>{{ server.id }}</td>
+                                <td>{{ server.hostname }}</td>
+                                <td>{{ server.pid }}</td>
+                                <td>{{ server.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S %Z') }}</td>
+                                <td><span class="badge bg-success">Active</span></td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center">No active servers found.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

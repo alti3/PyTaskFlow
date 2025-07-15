@@ -8,3 +8,5 @@ wheels/
 
 # Virtual environments
 .venv
+run_dashboard.py
+.env

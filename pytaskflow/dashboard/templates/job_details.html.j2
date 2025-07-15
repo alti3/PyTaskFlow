@@ -1,0 +1,50 @@
+{% extends "_layout.html.j2" %}
+
+{% block content %}
+    <h1 class="mb-4">Job Details</h1>
+
+    {% if job %}
+        <div class="card">
+            <div class="card-header">
+                Job ID: {{ job.id }}
+            </div>
+            <div class="card-body">
+                <dl class="row">
+                    <dt class="col-sm-3">Task Name</dt>
+                    <dd class="col-sm-9">{{ job.task_name }}</dd>
+
+                    <dt class="col-sm-3">Status</dt>
+                    <dd class="col-sm-9"><span class="badge bg-primary">{{ job.status.value }}</span></dd>
+
+                    <dt class="col-sm-3">Created At</dt>
+                    <dd class="col-sm-9">{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S %Z') }}</dd>
+
+                    <dt class="col-sm-3">Updated At</dt>
+                    <dd class="col-sm-9">{{ job.updated_at.strftime('%Y-%m-%d %H:%M:%S %Z') }}</dd>
+
+                    <dt class="col-sm-3">Arguments</dt>
+                    <dd class="col-sm-9"><pre><code>{{ job.task_args | tojson(indent=4) }}</code></pre></dd>
+
+                    <dt class="col-sm-3">Keyword Arguments</dt>
+                    <dd class="col-sm-9"><pre><code>{{ job.task_kwargs | tojson(indent=4) }}</code></pre></dd>
+
+                    <dt class="col-sm-3">Result</dt>
+                    <dd class="col-sm-9">
+                        {% if job.result %}
+                            <pre><code>{{ job.result | tojson(indent=4) }}</code></pre>
+                        {% else %}
+                            <span class="text-muted">No result yet.</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+            <div class="card-footer">
+                <a href="{{ url_for('list_jobs_by_status', status=job.status.value) }}" class="btn btn-secondary">Back to list</a>
+            </div>
+        </div>
+    {% else %}
+        <div class="alert alert-danger" role="alert">
+            Job not found.
+        </div>
+    {% endif %}
+{% endblock %}
