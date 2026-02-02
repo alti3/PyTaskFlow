@@ -10,38 +10,60 @@
             </div>
             <div class="card-body">
                 <dl class="row">
-                    <dt class="col-sm-3">Task Name</dt>
-                    <dd class="col-sm-9">{{ job.task_name }}</dd>
+                    <dt class="col-sm-3">Task</dt>
+                    <dd class="col-sm-9"><code>{{ job.target_module }}.{{ job.target_function }}</code></dd>
 
-                    <dt class="col-sm-3">Status</dt>
-                    <dd class="col-sm-9"><span class="badge bg-primary">{{ job.status.value }}</span></dd>
+                    <dt class="col-sm-3">State</dt>
+                    <dd class="col-sm-9"><span class="badge bg-primary">{{ job.state_name }}</span></dd>
 
                     <dt class="col-sm-3">Created At</dt>
-                    <dd class="col-sm-9">{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S %Z') }}</dd>
+                    <dd class="col-sm-9">{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S %Z') if job.created_at else "" }}</dd>
 
-                    <dt class="col-sm-3">Updated At</dt>
-                    <dd class="col-sm-9">{{ job.updated_at.strftime('%Y-%m-%d %H:%M:%S %Z') }}</dd>
+                    <dt class="col-sm-3">Queue</dt>
+                    <dd class="col-sm-9">{{ job.queue }}</dd>
+
+                    <dt class="col-sm-3">Retry Count</dt>
+                    <dd class="col-sm-9">{{ job.retry_count }}</dd>
 
                     <dt class="col-sm-3">Arguments</dt>
-                    <dd class="col-sm-9"><pre><code>{{ job.task_args | tojson(indent=4) }}</code></pre></dd>
+                    <dd class="col-sm-9"><pre><code>{{ args | tojson(indent=4) }}</code></pre></dd>
 
                     <dt class="col-sm-3">Keyword Arguments</dt>
-                    <dd class="col-sm-9"><pre><code>{{ job.task_kwargs | tojson(indent=4) }}</code></pre></dd>
+                    <dd class="col-sm-9"><pre><code>{{ kwargs | tojson(indent=4) }}</code></pre></dd>
 
-                    <dt class="col-sm-3">Result</dt>
-                    <dd class="col-sm-9">
-                        {% if job.result %}
-                            <pre><code>{{ job.result | tojson(indent=4) }}</code></pre>
-                        {% else %}
-                            <span class="text-muted">No result yet.</span>
-                        {% endif %}
-                    </dd>
+                    <dt class="col-sm-3">State Data</dt>
+                    <dd class="col-sm-9"><pre><code>{{ state_data | tojson(indent=4) }}</code></pre></dd>
                 </dl>
             </div>
             <div class="card-footer">
-                <a href="{{ url_for('list_jobs_by_status', status=job.status.value) }}" class="btn btn-secondary">Back to list</a>
+                <a href="{{ url_for('list_jobs_by_status', status=job.state_name) }}" class="btn btn-secondary">Back to list</a>
             </div>
         </div>
+        {% if history %}
+            <div class="card mt-4">
+                <div class="card-header">History</div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>State</th>
+                                <th>Timestamp</th>
+                                <th>Data</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in history %}
+                                <tr>
+                                    <td>{{ entry.state }}</td>
+                                    <td>{{ entry.timestamp }}</td>
+                                    <td><pre class="mb-0"><code>{{ entry.data | tojson(indent=2) }}</code></pre></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
     {% else %}
         <div class="alert alert-danger" role="alert">
             Job not found.

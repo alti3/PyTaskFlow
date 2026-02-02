@@ -1,5 +1,4 @@
 {% extends "_layout.html.j2" %}
-{% from "_macros.html.j2" import render_job_row %}
 
 {% block content %}
     <h1 class="mb-4">Recurring Jobs</h1>
@@ -12,19 +11,24 @@
                         <th scope="col">ID</th>
                         <th scope="col">Task</th>
                         <th scope="col">Cron</th>
-                        <th scope="col">Next Run</th>
-                        <th scope="col">Actions</th>
+                        <th scope="col">Last Execution</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% if jobs %}
                         {% for job in jobs %}
-                            {# Adjust render_job_row or create a new macro for recurring jobs #}
-                            {{ render_job_row(job) }}
+                            <tr>
+                                <td>{{ job.id }}</td>
+                                <td>
+                                    <code>{{ job.job.target_module }}.{{ job.job.target_function }}</code>
+                                </td>
+                                <td>{{ job.cron }}</td>
+                                <td>{{ job.last_execution or "—" }}</td>
+                            </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="5" class="text-center">No recurring jobs found.</td>
+                            <td colspan="4" class="text-center">No recurring jobs found.</td>
                         </tr>
                     {% endif %}
                 </tbody>

@@ -3,22 +3,22 @@ from typing import Callable, Any, Optional, List, Dict
 from datetime import datetime, UTC
 
 from .common.job import Job
-from .common.states import EnqueuedState, ScheduledState
+from .common.states import EnqueuedState, ScheduledState, DeletedState
 from .storage.base import JobStorage
 from .storage.redis_storage import RedisStorage
 from .serialization.base import BaseSerializer
 from .serialization.json_serializer import JsonSerializer
 
 
-class Client:
+class BackgroundJobClient:
     """
     A client for interacting with PyTaskFlow, enabling job enqueuing, scheduling,
     and querying for the dashboard.
     """
-    def __init__(
-        self, storage: Optional[JobStorage] = None, serializer: Optional[BaseSerializer] = None
-    ):
-        self.storage = storage or RedisStorage()
+    def __init__(self, storage: JobStorage, serializer: Optional[BaseSerializer] = None):
+        if storage is None:
+            raise ValueError("storage is required for BackgroundJobClient")
+        self.storage = storage
         self.serializer = serializer or JsonSerializer()
 
     def enqueue(self, target_func: Callable, *args: Any, **kwargs: Any) -> str:
@@ -85,22 +85,18 @@ class Client:
     def trigger(self, recurring_job_id: str):
         self.storage.trigger_recurring_job(recurring_job_id)
 
+    def delete(self, job_id: str) -> bool:
+        return self.storage.set_job_state(
+            job_id, DeletedState(reason="Manually deleted")
+        )
+
     # --- Dashboard Methods ---
 
     def get_jobs_by_state(
         self, state_name: str, page: int = 1, page_size: int = 20
     ) -> List[Job]:
         start = (page - 1) * page_size
-        job_ids = self.storage.get_job_ids_by_state(state_name, start, page_size)
-        if not job_ids:
-            return []
-        
-        jobs = []
-        for job_id in job_ids:
-            job_data = self.storage.get_job_data(job_id)
-            if job_data:
-                jobs.append(job_data)
-        return jobs
+        return self.storage.get_jobs_by_state(state_name, start, page_size)
 
     def get_job_details(self, job_id: str) -> Optional[Job]:
         return self.storage.get_job_data(job_id)
@@ -112,8 +108,19 @@ class Client:
         }
 
     def get_servers(self) -> List[Dict]:
+        if hasattr(self.storage, "get_servers"):
+            return self.storage.get_servers()
         return self.storage.get_all_servers()
 
     def get_recurring_jobs(self, page: int = 1, page_size: int = 20) -> List[Dict]:
         start = (page - 1) * page_size
         return self.storage.get_recurring_jobs(start, page_size)
+
+
+class Client(BackgroundJobClient):
+    def __init__(
+        self,
+        storage: Optional[JobStorage] = None,
+        serializer: Optional[BaseSerializer] = None,
+    ):
+        super().__init__(storage or RedisStorage(), serializer)

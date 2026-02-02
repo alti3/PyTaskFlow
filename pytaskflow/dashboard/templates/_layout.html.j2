@@ -17,19 +17,25 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='enqueued') }}">Enqueued</a>
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Enqueued') }}">Enqueued</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='wip') }}">WIP</a>
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Processing') }}">Processing</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='completed') }}">Completed</a>
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Succeeded') }}">Succeeded</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='failed') }}">Failed</a>
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Failed') }}">Failed</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='cancelled') }}">Cancelled</a>
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Deleted') }}">Deleted</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Awaiting') }}">Awaiting</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('list_jobs_by_status', status='Cancelled') }}">Cancelled</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('recurring_jobs') }}">Recurring</a>

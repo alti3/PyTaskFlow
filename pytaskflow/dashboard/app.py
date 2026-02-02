@@ -8,7 +8,7 @@ from litestar.static_files import create_static_files_router
 from litestar.template.config import TemplateConfig
 
 from litestar.di import Provide
-from litestar.state import State
+from litestar.datastructures import State
 
 from .controllers.core import CoreController
 from .controllers.jobs import JobsController

@@ -8,7 +8,7 @@ from pytaskflow.common.job import Job
 from pytaskflow.common.states import (
     EnqueuedState,
     ProcessingState,
-    CompletedState,
+    SucceededState,
     FailedState,
     ScheduledState,
 )
@@ -95,9 +95,9 @@ def test_processing_state():
     assert state.serialize_data() == {"server_id": "server1", "worker_id": "worker123"}
 
 
-def test_completed_state():
-    state = CompletedState(result=42, reason="Completed successfully")
-    assert state.name == "completed"
+def test_succeeded_state():
+    state = SucceededState(result=42, reason="Completed successfully")
+    assert state.name == "Succeeded"
     assert state.result == 42
     assert state.reason == "Completed successfully"
     assert state.serialize_data() == {"result": 42}
@@ -110,7 +110,7 @@ def test_failed_state():
         "Traceback details",
         reason="Failed to execute",
     )
-    assert state.name == "failed"
+    assert state.name == "Failed"
     assert state.exception_type == "ValueError"
     assert state.exception_message == "Something went wrong"
     assert state.exception_details == "Traceback details"
@@ -128,7 +128,7 @@ def test_scheduled_state():
     state = ScheduledState(
         enqueue_at=later, scheduled_at=now, reason="Delayed execution"
     )
-    assert state.name == "scheduled"
+    assert state.name == "Scheduled"
     assert state.enqueue_at == later
     assert state.scheduled_at == now
     assert state.serialize_data() == {
@@ -210,13 +210,13 @@ def test_memory_storage_set_job_state(memory_storage):
     )
     memory_storage.enqueue(job)
 
-    completed_state = CompletedState(result=42)
+    completed_state = SucceededState(result=42)
     success = memory_storage.set_job_state(
         job.id, completed_state, expected_old_state=EnqueuedState.NAME
     )
     assert success
     retrieved_job = memory_storage.get_job_data(job.id)
-    assert retrieved_job.state_name == CompletedState.NAME
+    assert retrieved_job.state_name == SucceededState.NAME
     assert retrieved_job.state_data == completed_state.serialize_data()
 
     # Test failed state change due to expected_old_state mismatch
@@ -319,7 +319,7 @@ def test_job_processor_success(memory_storage, json_serializer):
     processor.process()
 
     updated_job = memory_storage.get_job_data(job.id)
-    assert updated_job.state_name == CompletedState.NAME
+    assert updated_job.state_name == SucceededState.NAME
     assert updated_job.state_data["result"] == 15
     assert job.id not in memory_storage._processing  # Should be acknowledged
 
@@ -416,7 +416,7 @@ def test_worker_processes_single_job(memory_storage, json_serializer, client):
     worker_thread.join()
 
     updated_job = memory_storage.get_job_data(job_id)
-    assert updated_job.state_name == CompletedState.NAME
+    assert updated_job.state_name == SucceededState.NAME
     assert updated_job.state_data["result"] == 300
 
 

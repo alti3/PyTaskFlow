@@ -9,7 +9,7 @@ from pytaskflow.common.job import Job
 from pytaskflow.common.states import (
     EnqueuedState,
     ProcessingState,
-    CompletedState,
+    SucceededState,
     FailedState,
     ScheduledState,
 )
@@ -95,7 +95,10 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     )  # State should change to Processing
 
     # Check if job is moved to processing list
-    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == [job_id]
+    assert (
+        redis_client.lrange(f"pytaskflow:queue:{job.queue}:processing", 0, -1)
+        == [job_id]
+    )
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue
@@ -112,13 +115,13 @@ def test_redis_storage_set_job_state(redis_storage, redis_client):
     )
     redis_storage.enqueue(job)
 
-    completed_state = CompletedState(result=42)
+    completed_state = SucceededState(result=42)
     success = redis_storage.set_job_state(
-        job.id, succeeded_state, expected_old_state=EnqueuedState.NAME
+        job.id, completed_state, expected_old_state=EnqueuedState.NAME
     )
     assert success
     retrieved_job = redis_storage.get_job_data(job.id)
-    assert retrieved_job.state_name == CompletedState.NAME
+    assert retrieved_job.state_name == SucceededState.NAME
     assert (
         retrieved_job.state_data["result"] == completed_state.serialize_data()["result"]
     )
@@ -145,7 +148,7 @@ def test_redis_storage_acknowledge(redis_storage, redis_client):
 
     redis_storage.acknowledge(job.id)
     # Acknowledged jobs are removed from processing list
-    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == []
+    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}:processing", 0, -1) == []
     assert redis_storage.get_job_data(job.id) is not None  # Job data should still exist
 
 
@@ -292,7 +295,7 @@ def test_worker_processes_scheduled_job(redis_storage, json_serializer, redis_cl
     worker_thread.join()
 
     updated_job = redis_storage.get_job_data(job.id)
-    assert updated_job.state_name == CompletedState.NAME
+    assert updated_job.state_name == SucceededState.NAME
     assert updated_job.state_data["result"] == 3000
     assert (
         redis_client.zcard("pytaskflow:scheduled") == 0

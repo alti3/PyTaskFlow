@@ -1,88 +1,143 @@
 # pytaskflow/common/states.py
 
-from datetime import datetime, UTC
-from typing import Dict, Any
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Dict, Any, final
 
 
-class BaseState:
-    NAME = "base"
+class BaseState(ABC):
+    NAME: str = "State"
 
-    def __init__(self, created_at: datetime = None):
-        self.created_at = created_at or datetime.now(UTC)
+    def __init__(self, reason: str | None = None):
+        self.reason = reason
 
+    @final
+    @property
+    def name(self) -> str:
+        return self.NAME
+
+    @abstractmethod
     def serialize_data(self) -> Dict[str, Any]:
-        return {"created_at": self.created_at.isoformat()}
-
-    @classmethod
-    def deserialize_data(cls, data: Dict[str, Any]) -> "BaseState":
-        return cls(created_at=datetime.fromisoformat(data["created_at"]))
+        """Serializes state-specific data into a dictionary."""
+        raise NotImplementedError
 
 
 class EnqueuedState(BaseState):
-    NAME = "enqueued"
+    NAME = "Enqueued"
+
+    def __init__(self, queue: str = "default", reason: str | None = None):
+        super().__init__(reason)
+        self.queue = queue
+
+    def serialize_data(self) -> Dict[str, Any]:
+        data = {"queue": self.queue}
+        if self.reason is not None:
+            data["reason"] = self.reason
+        return data
 
 
 class ScheduledState(BaseState):
-    NAME = "scheduled"
+    NAME = "Scheduled"
 
-    def __init__(self, enqueue_at: datetime, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        enqueue_at: datetime,
+        scheduled_at: datetime,
+        reason: str | None = None,
+    ):
+        super().__init__(reason)
         self.enqueue_at = enqueue_at
+        self.scheduled_at = scheduled_at
 
     def serialize_data(self) -> Dict[str, Any]:
-        data = super().serialize_data()
-        data["enqueue_at"] = self.enqueue_at.isoformat()
-        return data
+        return {
+            "enqueue_at": self.enqueue_at.isoformat(),
+            "scheduled_at": self.scheduled_at.isoformat(),
+        }
 
 
 class ProcessingState(BaseState):
-    NAME = "processing"
+    NAME = "Processing"
 
-    def __init__(self, server: str, worker_id: str, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.server = server
+    def __init__(self, server_id: str, worker_id: str, reason: str | None = None):
+        super().__init__(reason)
+        self.server_id = server_id
         self.worker_id = worker_id
 
     def serialize_data(self) -> Dict[str, Any]:
-        data = super().serialize_data()
-        data.update({"server": self.server, "worker_id": self.worker_id})
-        return data
+        return {"server_id": self.server_id, "worker_id": self.worker_id}
 
 
-class CompletedState(BaseState):
-    NAME = "completed"
+class SucceededState(BaseState):
+    NAME = "Succeeded"
 
-    def __init__(self, result: Any, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, result: Any, reason: str | None = None):
+        super().__init__(reason)
         self.result = result
 
     def serialize_data(self) -> Dict[str, Any]:
-        data = super().serialize_data()
-        data["result"] = self.result
-        return data
+        return {"result": self.result}
+
+
+class CompletedState(SucceededState):
+    NAME = SucceededState.NAME
 
 
 class FailedState(BaseState):
-    NAME = "failed"
+    NAME = "Failed"
 
-    def __init__(self, exception: str, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.exception = exception
+    def __init__(
+        self,
+        exception_type: str,
+        exception_message: str,
+        exception_details: str,
+        reason: str | None = None,
+    ):
+        super().__init__(reason)
+        self.exception_type = exception_type
+        self.exception_message = exception_message
+        self.exception_details = exception_details
 
     def serialize_data(self) -> Dict[str, Any]:
-        data = super().serialize_data()
-        data["exception"] = self.exception
-        return data
+        return {
+            "exception_type": self.exception_type,
+            "exception_message": self.exception_message,
+            "exception_details": self.exception_details,
+        }
 
 
 class CancelledState(BaseState):
-    NAME = "cancelled"
+    NAME = "Cancelled"
+
+    def serialize_data(self) -> Dict[str, Any]:
+        return {}
+
+
+class DeletedState(BaseState):
+    NAME = "Deleted"
+
+    def serialize_data(self) -> Dict[str, Any]:
+        return {}
+
+
+class AwaitingState(BaseState):
+    NAME = "Awaiting"
+
+    def __init__(self, parent_id: str, reason: str | None = None):
+        super().__init__(reason)
+        self.parent_id = parent_id
+
+    def serialize_data(self) -> Dict[str, Any]:
+        return {"parent_id": self.parent_id}
+
 
 ALL_STATES = [
     EnqueuedState.NAME,
     ScheduledState.NAME,
     ProcessingState.NAME,
-    CompletedState.NAME,
+    SucceededState.NAME,
     FailedState.NAME,
     CancelledState.NAME,
+    DeletedState.NAME,
+    AwaitingState.NAME,
 ]

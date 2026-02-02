@@ -9,8 +9,8 @@
                 <thead>
                     <tr>
                         <th scope="col">ID</th>
-                        <th scope="col">Hostname</th>
-                        <th scope="col">PID</th>
+                        <th scope="col">Workers</th>
+                        <th scope="col">Queues</th>
                         <th scope="col">Last Heartbeat</th>
                         <th scope="col">Status</th>
                     </tr>
@@ -20,9 +20,9 @@
                         {% for server in servers %}
                             <tr>
                                 <td>{{ server.id }}</td>
-                                <td>{{ server.hostname }}</td>
-                                <td>{{ server.pid }}</td>
-                                <td>{{ server.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S %Z') }}</td>
+                                <td>{{ server.worker_count }}</td>
+                                <td>{{ server.queues | join(", ") }}</td>
+                                <td>{{ server.last_heartbeat }}</td>
                                 <td><span class="badge bg-success">Active</span></td>
                             </tr>
                         {% endfor %}

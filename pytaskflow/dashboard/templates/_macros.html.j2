@@ -1,10 +1,11 @@
 {% macro render_job_row(job) %}
 <tr>
     <td><a href="{{ url_for('job_details', job_id=job.id) }}">{{ job.id }}</a></td>
-    <td>{{ job.task_name }}</td>
-    <td>{{ job.status.value }}</td>
-    <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-    <td>{{ job.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+    <td><code>{{ job.target_module }}.{{ job.target_function }}</code></td>
+    <td>{{ job.queue }}</td>
+    <td><span class="badge bg-secondary">{{ job.state_name }}</span></td>
+    <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S %Z') if job.created_at else "" }}</td>
+    <td>{{ job.retry_count }}</td>
     <td>
         <a href="{{ url_for('job_details', job_id=job.id) }}" class="btn btn-sm btn-info">Details</a>
     </td>

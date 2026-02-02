@@ -40,6 +40,11 @@ class JobStorage(ABC):
     def get_job_data(self, job_id: str) -> Optional[Job]: ...
 
     @abstractmethod
+    def get_jobs_by_state(
+        self, state_name: str, start: int, count: int
+    ) -> List[Job]: ...
+
+    @abstractmethod
     def get_job_ids_by_state(
         self, state_name: str, start: int, count: int
     ) -> List[str]: ...
@@ -51,7 +56,24 @@ class JobStorage(ABC):
     def get_all_servers(self) -> List[dict]: ...
 
     @abstractmethod
+    def server_heartbeat(self, server_id: str, worker_count: int, queues: List[str]):
+        ...
+
+    @abstractmethod
+    def remove_server(self, server_id: str):
+        ...
+
+    @abstractmethod
+    def get_servers(self) -> List[dict]: ...
+
+    @abstractmethod
     def get_recurring_jobs(self, start: int, count: int) -> List[dict]: ...
 
     @abstractmethod
     def update_job_field(self, job_id: str, field_name: str, value: Any) -> None: ...
+
+    @abstractmethod
+    def get_job_history(self, job_id: str) -> List[dict]: ...
+
+    @abstractmethod
+    def get_statistics(self) -> dict: ...
