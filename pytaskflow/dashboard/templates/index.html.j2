@@ -20,11 +20,12 @@
     {% for state, count in stats.items() %}
     {% set state_key = state | lower %}
     {% set accent_class = state_accents.get(state_key, "bg-slate-400") %}
+    {% set pulse_class = "processing-pulse" if state_key == "processing" else "" %}
     <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
         <div class="flex items-center justify-between">
             <p class="text-sm font-medium text-slate-500 capitalize">{{ state }}</p>
             <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                <span class="h-2 w-2 rounded-full {{ accent_class }}"></span>
+                <span class="h-2 w-2 rounded-full {{ accent_class }} {{ pulse_class }}"></span>
                 State
             </span>
         </div>

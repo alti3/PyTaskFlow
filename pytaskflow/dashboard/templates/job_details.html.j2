@@ -11,24 +11,31 @@
         {% if state == "succeeded" %}
             {% set badge_classes = "border-emerald-200 bg-emerald-50 text-emerald-700" %}
             {% set accent_border = "border-t-emerald-400" %}
+            {% set pulse_class = "" %}
         {% elif state == "failed" %}
             {% set badge_classes = "border-rose-200 bg-rose-50 text-rose-700" %}
             {% set accent_border = "border-t-rose-400" %}
+            {% set pulse_class = "" %}
         {% elif state == "processing" %}
             {% set badge_classes = "border-amber-200 bg-amber-50 text-amber-700" %}
             {% set accent_border = "border-t-amber-400" %}
+            {% set pulse_class = "processing-pulse" %}
         {% elif state == "enqueued" %}
             {% set badge_classes = "border-sky-200 bg-sky-50 text-sky-700" %}
             {% set accent_border = "border-t-sky-400" %}
+            {% set pulse_class = "" %}
         {% elif state == "awaiting" %}
             {% set badge_classes = "border-indigo-200 bg-indigo-50 text-indigo-700" %}
             {% set accent_border = "border-t-indigo-400" %}
+            {% set pulse_class = "" %}
         {% elif state == "cancelled" %}
             {% set badge_classes = "border-orange-200 bg-orange-50 text-orange-700" %}
             {% set accent_border = "border-t-orange-400" %}
+            {% set pulse_class = "" %}
         {% else %}
             {% set badge_classes = "border-slate-200 bg-slate-50 text-slate-600" %}
             {% set accent_border = "border-t-slate-300" %}
+            {% set pulse_class = "" %}
         {% endif %}
 
         <div class="rounded-2xl border border-slate-200 bg-white shadow-sm border-t-4 {{ accent_border }}">
@@ -38,7 +45,7 @@
                     <p class="mt-2 font-mono text-xs text-slate-700">{{ job.id }}</p>
                 </div>
                 <span class="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold {{ badge_classes }}">
-                    <span class="h-2 w-2 rounded-full bg-current"></span>
+                    <span class="h-2 w-2 rounded-full bg-current {{ pulse_class }}"></span>
                     {{ job.state_name }}
                 </span>
             </div>

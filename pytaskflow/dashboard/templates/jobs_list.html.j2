@@ -6,24 +6,31 @@
     {% if status_key == "succeeded" %}
         {% set status_badge = "border-emerald-200 bg-emerald-50 text-emerald-700" %}
         {% set status_dot = "bg-emerald-500" %}
+        {% set status_pulse = "" %}
     {% elif status_key == "failed" %}
         {% set status_badge = "border-rose-200 bg-rose-50 text-rose-700" %}
         {% set status_dot = "bg-rose-500" %}
+        {% set status_pulse = "" %}
     {% elif status_key == "processing" %}
         {% set status_badge = "border-amber-200 bg-amber-50 text-amber-700" %}
         {% set status_dot = "bg-amber-500" %}
+        {% set status_pulse = "processing-pulse" %}
     {% elif status_key == "enqueued" %}
         {% set status_badge = "border-sky-200 bg-sky-50 text-sky-700" %}
         {% set status_dot = "bg-sky-500" %}
+        {% set status_pulse = "" %}
     {% elif status_key == "awaiting" %}
         {% set status_badge = "border-indigo-200 bg-indigo-50 text-indigo-700" %}
         {% set status_dot = "bg-indigo-500" %}
+        {% set status_pulse = "" %}
     {% elif status_key == "cancelled" %}
         {% set status_badge = "border-orange-200 bg-orange-50 text-orange-700" %}
         {% set status_dot = "bg-orange-500" %}
+        {% set status_pulse = "" %}
     {% else %}
         {% set status_badge = "border-slate-200 bg-slate-50 text-slate-600" %}
         {% set status_dot = "bg-slate-400" %}
+        {% set status_pulse = "" %}
     {% endif %}
 
     <div class="mb-6 space-y-1">
@@ -31,7 +38,7 @@
         <p class="text-sm text-slate-500">
             Showing
             <span class="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold {{ status_badge }}">
-                <span class="h-2 w-2 rounded-full {{ status_dot }}"></span>
+                <span class="h-2 w-2 rounded-full {{ status_dot }} {{ status_pulse }}"></span>
                 <span class="capitalize">{{ status }}</span>
             </span>
             jobs and their current execution status.
