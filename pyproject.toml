@@ -24,17 +24,9 @@ dev = [
 
 # --- Hatchling-specific configuration ---
 [build-system]
-requires = ["hatchling>=1.26.0"] # Require Hatchling
-build-backend = "hatchling.build" # Set Hatchling as the build backend
+requires = ["uv_build>=0.9.29,<0.10.0"]
+build-backend = "uv_build"
 
-[tool.hatch.build]
-# If your Python package code (the 'pytaskflow' directory) is directly in the project root,
-# you might not strictly need the 'packages' key for simple cases.
-# However, it's good practice to explicitly tell Hatchling where your package lives.
-# If 'pytaskflow' folder is at the root level, this is fine.
-packages = ["pytaskflow"]
-
-# If your source code is in a 'src' directory (e.g., PyTaskFlow/src/pytaskflow/),
-# you would configure it like this instead:
-# packages = ["src/pytaskflow"]
-# sources = ["src"] # This tells Hatch where to find the source root
+[tool.uv.build-backend]
+module-name = "pytaskflow"
+module-root = ""
