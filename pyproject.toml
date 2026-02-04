@@ -22,7 +22,6 @@ dev = [
     "ty>=0.0.1a12",
 ]
 
-# --- Hatchling-specific configuration ---
 [build-system]
 requires = ["uv_build>=0.9.29,<0.10.0"]
 build-backend = "uv_build"
