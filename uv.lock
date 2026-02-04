@@ -401,9 +401,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "cronsim" },
-    { name = "litestar", extra = ["jinja"] },
     { name = "redis" },
-    { name = "uvicorn" },
 ]
 
 [package.optional-dependencies]
@@ -420,13 +418,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cronsim", specifier = ">=2.6" },
-    { name = "litestar", extras = ["jinja"], specifier = ">=2.16.0" },
-    { name = "litestar", extras = ["jinja", "standard"], marker = "extra == 'dashboard'", specifier = ">=2.9.1" },
+    { name = "litestar", extras = ["jinja", "standard"], marker = "extra == 'dashboard'", specifier = ">=2.16.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.1" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.1" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.1a12" },
-    { name = "uvicorn", specifier = ">=0.35.0" },
     { name = "uvicorn", marker = "extra == 'dashboard'", specifier = ">=0.35.0" },
 ]
 provides-extras = ["dashboard", "dev"]

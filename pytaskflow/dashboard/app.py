@@ -18,11 +18,12 @@ async def get_client(state: State) -> "Client":
     return state.client
 
 
-def create_dashboard_app(client: "Client") -> Litestar:
+def create_dashboard_app(client: "Client", debug: bool = False) -> Litestar:
     """Create the Litestar application for the dashboard.
 
     Args:
         client: A PyTaskFlow client instance.
+        debug: Whether to enable Litestar debug mode.
 
     Returns:
         A Litestar application.
@@ -43,5 +44,5 @@ def create_dashboard_app(client: "Client") -> Litestar:
         ),
         state=State({"client": client}),
         dependencies={"client": Provide(get_client)},
-        debug=True,
+        debug=debug,
     )

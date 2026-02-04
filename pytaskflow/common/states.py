@@ -79,9 +79,6 @@ class SucceededState(BaseState):
         return {"result": self.result}
 
 
-class CompletedState(SucceededState):
-    NAME = SucceededState.NAME
-
 
 class FailedState(BaseState):
     NAME = "Failed"
