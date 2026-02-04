@@ -15,7 +15,10 @@ class BackgroundJobClient:
     A client for interacting with PyTaskFlow, enabling job enqueuing, scheduling,
     and querying for the dashboard.
     """
-    def __init__(self, storage: JobStorage, serializer: Optional[BaseSerializer] = None):
+
+    def __init__(
+        self, storage: JobStorage, serializer: Optional[BaseSerializer] = None
+    ):
         if storage is None:
             raise ValueError("storage is required for BackgroundJobClient")
         self.storage = storage
@@ -103,9 +106,8 @@ class BackgroundJobClient:
 
     def get_state_counts(self) -> Dict[str, int]:
         from .common.states import ALL_STATES
-        return {
-            state: self.storage.get_state_job_count(state) for state in ALL_STATES
-        }
+
+        return {state: self.storage.get_state_job_count(state) for state in ALL_STATES}
 
     def get_servers(self) -> List[Dict]:
         if hasattr(self.storage, "get_servers"):

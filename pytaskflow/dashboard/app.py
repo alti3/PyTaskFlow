@@ -1,4 +1,5 @@
 """Litestar application factory for the PyTaskFlow dashboard."""
+
 from pathlib import Path
 from litestar import Litestar
 from litestar.contrib.jinja import JinjaTemplateEngine

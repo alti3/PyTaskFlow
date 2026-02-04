@@ -13,16 +13,11 @@ from pytaskflow.common.states import (
     FailedState,
     ScheduledState,
 )
-from pytaskflow.common.exceptions import JobLoadError
 from pytaskflow.serialization.json_serializer import JsonSerializer
 from pytaskflow.storage.redis_storage import RedisStorage
 from pytaskflow.client import BackgroundJobClient
-from pytaskflow.execution.performer import perform_job
-from pytaskflow.server.processor import JobProcessor
 from pytaskflow.server.worker import Worker
-from pytaskflow.filters.builtin import RetryFilter
-from pytaskflow.server.context import ElectStateContext
-from pytaskflow.config import configure, get_storage
+from pytaskflow.config import configure
 
 
 # --- Helper functions for testing jobs ---
@@ -97,10 +92,9 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     )  # State should change to Processing
 
     # Check if job is moved to processing list
-    assert (
-        redis_client.lrange(f"pytaskflow:queue:{job.queue}:processing", 0, -1)
-        == [job_id]
-    )
+    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}:processing", 0, -1) == [
+        job_id
+    ]
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue

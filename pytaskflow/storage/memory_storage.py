@@ -8,7 +8,12 @@ from datetime import datetime, UTC
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.common.job import Job
-from pytaskflow.common.states import BaseState, ProcessingState, EnqueuedState, ALL_STATES
+from pytaskflow.common.states import (
+    BaseState,
+    ProcessingState,
+    EnqueuedState,
+    ALL_STATES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +105,9 @@ class MemoryStorage(JobStorage):
                         job_id = self._queues[queue_name].popleft()
                         job = self._jobs[job_id]
 
-                        self.set_job_state(job.id, ProcessingState(server_id, worker_id))
+                        self.set_job_state(
+                            job.id, ProcessingState(server_id, worker_id)
+                        )
                         self._processing[job.id] = job
                         return job
 
@@ -153,11 +160,11 @@ class MemoryStorage(JobStorage):
             if job:
                 setattr(job, field_name, value)
 
-    def get_jobs_by_state(
-        self, state_name: str, start: int, count: int
-    ) -> List[Job]:
+    def get_jobs_by_state(self, state_name: str, start: int, count: int) -> List[Job]:
         with self._lock:
-            matching = [job for job in self._jobs.values() if job.state_name == state_name]
+            matching = [
+                job for job in self._jobs.values() if job.state_name == state_name
+            ]
             return matching[start : start + count]
 
     def get_job_ids_by_state(

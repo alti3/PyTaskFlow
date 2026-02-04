@@ -148,14 +148,21 @@ class RedisStorage(JobStorage):
         # Implementation remains the same...
         job_dict = {}
         for key, value in job_data.items():
-            if isinstance(key, bytes): key = key.decode("utf-8")
-            if isinstance(value, bytes): value = value.decode("utf-8")
-            if key == "created_at": job_dict[key] = datetime.fromisoformat(value)
+            if isinstance(key, bytes):
+                key = key.decode("utf-8")
+            if isinstance(value, bytes):
+                value = value.decode("utf-8")
+            if key == "created_at":
+                job_dict[key] = datetime.fromisoformat(value)
             elif key == "state_data":
-                try: job_dict[key] = json.loads(value)
-                except (json.JSONDecodeError, TypeError): job_dict[key] = {}
-            elif key == "retry_count": job_dict[key] = int(value)
-            else: job_dict[key] = value
+                try:
+                    job_dict[key] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    job_dict[key] = {}
+            elif key == "retry_count":
+                job_dict[key] = int(value)
+            else:
+                job_dict[key] = value
         return Job(**job_dict)
 
     def _record_initial_state(self, job: Job) -> None:
@@ -169,7 +176,6 @@ class RedisStorage(JobStorage):
             pipe.rpush(history_key, json.dumps(history_entry, default=str))
             pipe.hincrby("pytaskflow:stats", job.state_name, 1)
             pipe.execute()
-
 
     def enqueue(self, job: Job) -> str:
         with self.redis_client.pipeline() as pipe:
@@ -220,9 +226,7 @@ class RedisStorage(JobStorage):
         state_key = f"pytaskflow:jobs:{state_name}"
         return self.redis_client.sort(state_key, start=start, num=count, desc=True)
 
-    def get_jobs_by_state(
-        self, state_name: str, start: int, count: int
-    ) -> List[Job]:
+    def get_jobs_by_state(self, state_name: str, start: int, count: int) -> List[Job]:
         job_ids = self.get_job_ids_by_state(state_name, start, count)
         if not job_ids:
             return []
@@ -334,7 +338,11 @@ class RedisStorage(JobStorage):
         job_dict = self._serialize_job_for_storage(job_template)
         data = {"job": job_dict, "cron": cron_expression, "last_execution": None}
         with self.redis_client.pipeline() as pipe:
-            pipe.hset("pytaskflow:recurring-jobs", recurring_job_id, json.dumps(data, default=str))
+            pipe.hset(
+                "pytaskflow:recurring-jobs",
+                recurring_job_id,
+                json.dumps(data, default=str),
+            )
             pipe.sadd("pytaskflow:recurring-jobs:ids", recurring_job_id)
             pipe.execute()
 
@@ -385,7 +393,9 @@ class RedisStorage(JobStorage):
         self.redis_client.lpush(processing_list, job_id)
 
         processing_state = ProcessingState(server_id, worker_id)
-        self.set_job_state(job_id, processing_state, expected_old_state=EnqueuedState.NAME)
+        self.set_job_state(
+            job_id, processing_state, expected_old_state=EnqueuedState.NAME
+        )
         job = self.get_job_data(job_id)
         if not job:
             self.redis_client.lrem(processing_list, 1, job_id)
@@ -400,9 +410,12 @@ class RedisStorage(JobStorage):
 
     def update_job_field(self, job_id: str, field_name: str, value: Any) -> None:
         job_key = f"pytaskflow:job:{job_id}"
-        if isinstance(value, (dict, list)): value = json.dumps(value)
-        elif isinstance(value, datetime): value = value.isoformat()
-        else: value = str(value)
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value)
+        elif isinstance(value, datetime):
+            value = value.isoformat()
+        else:
+            value = str(value)
         self.redis_client.hset(job_key, field_name, value)
 
     def get_job_history(self, job_id: str) -> List[dict]:

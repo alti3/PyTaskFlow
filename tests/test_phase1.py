@@ -19,8 +19,6 @@ from pytaskflow.client import BackgroundJobClient
 from pytaskflow.execution.performer import perform_job
 from pytaskflow.server.processor import JobProcessor
 from pytaskflow.server.worker import Worker
-from pytaskflow.filters.builtin import RetryFilter
-from pytaskflow.server.context import ElectStateContext
 from pytaskflow.config import configure, get_storage
 
 

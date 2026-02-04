@@ -22,7 +22,9 @@ def get_client(serializer: BaseSerializer | None = None) -> BackgroundJobClient:
     return _client
 
 
-def get_pytaskflow_client(serializer: BaseSerializer | None = None) -> BackgroundJobClient:
+def get_pytaskflow_client(
+    serializer: BaseSerializer | None = None,
+) -> BackgroundJobClient:
     return get_client(serializer)
 
 

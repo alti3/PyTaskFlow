@@ -415,6 +415,11 @@ dev = [
     { name = "ty" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cronsim", specifier = ">=2.6" },
@@ -426,6 +431,9 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'dashboard'", specifier = ">=0.35.0" },
 ]
 provides-extras = ["dashboard", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.12.1" }]
 
 [[package]]
 name = "pytest"

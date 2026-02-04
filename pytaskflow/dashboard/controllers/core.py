@@ -1,4 +1,5 @@
 """Core dashboard routes."""
+
 from datetime import UTC, datetime
 
 from litestar import Controller, get
