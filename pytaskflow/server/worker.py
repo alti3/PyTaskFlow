@@ -181,17 +181,12 @@ class Worker:
                         if not dequeued_job:
                             break
 
-                        job = self.storage.get_job_data(dequeued_job.id)
-                        if not job:
-                            logger.warning(
-                                f"[{self.worker_id}] Dequeued job {dequeued_job.id} not found in storage. Skipping."
-                            )
-                            continue
-
                         logger.info(
-                            f"[{self.worker_id}] Picked up job {job.id} (state: {job.state_name}, retry_count: {job.retry_count})"
+                            f"[{self.worker_id}] Picked up job {dequeued_job.id} (state: {dequeued_job.state_name}, retry_count: {dequeued_job.retry_count})"
                         )
-                        processor = JobProcessor(job, self.storage, self.serializer)
+                        processor = JobProcessor(
+                            dequeued_job, self.storage, self.serializer
+                        )
                         in_flight_futures.add(executor.submit(processor.process))
 
                     if not in_flight_futures:

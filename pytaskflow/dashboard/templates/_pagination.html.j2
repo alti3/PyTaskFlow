@@ -9,8 +9,8 @@
 
 <nav aria-label="Page navigation" class="flex justify-center">
     <div class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        <a class="{{ prev_classes }}" href="{{ url_for('list_jobs_by_status', status=status, page=page-1) if has_prev else '#' }}" tabindex="-1" aria-disabled="{{ not has_prev }}">Previous</a>
+        <a class="{{ prev_classes }}" href="{{ url_for('list_jobs_by_status', status=status, page=page-1) if has_prev else '#' }}" {% if has_prev %}aria-disabled="false"{% else %}tabindex="-1" aria-disabled="true"{% endif %}>Previous</a>
         <span class="px-3 text-xs font-medium text-slate-500">Page {{ page }} of {{ total_pages }}</span>
-        <a class="{{ next_classes }}" href="{{ url_for('list_jobs_by_status', status=status, page=page+1) if has_next else '#' }}">Next</a>
+        <a class="{{ next_classes }}" href="{{ url_for('list_jobs_by_status', status=status, page=page+1) if has_next else '#' }}" {% if has_next %}aria-disabled="false"{% else %}tabindex="-1" aria-disabled="true"{% endif %}>Next</a>
     </div>
 </nav>
