@@ -221,7 +221,13 @@ class Worker:
                     time.sleep(5)  # Cooldown period after a major failure
 
             for future in as_completed(in_flight_futures):
-                future.result()
+                try:
+                    future.result()
+                except Exception as exc:
+                    logger.error(
+                        f"[{self.worker_id}] Job processor task failed during shutdown: {exc}",
+                        exc_info=True,
+                    )
 
         self.storage.remove_server(self.server_id)
         logger.info(f"[{self.worker_id}] Worker has stopped.")
