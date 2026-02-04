@@ -378,7 +378,7 @@ sequenceDiagram
 | 1     | Core MVP                        | ✅ Complete | • Job data model<br>• JSON serializer (function path + args)<br>• `JobStorage` ABC and `MemoryStorage` implementation<br>• Basic `BackgroundJobClient` for fire-and-forget<br>• Basic `Worker` (single-threaded, synchronous execution)<br>• Core states: Enqueued, Processing, Succeeded, Failed<br>• Basic retry filter |
 | 2     | Storage & Basic Features        | ✅ Complete | • `RedisStorage` implementation<br>• Delayed jobs (`ScheduledState` and scheduler)<br>• Recurring jobs (CRON, `RecurringJobManager`, scheduler)<br>• Basic logging |
 | 3     | Worker Enhancements & Dashboard | ✅ Complete | • Threaded worker<br>• Basic Dashboard (read-only job views)<br>• More states (Deleted, Awaiting) |
-| 4     | Advanced Features & Integrations | ⏳ To Do    | • Asyncio worker support<br>• SQLAlchemy storage (optional)<br>• Interactive Dashboard (retry/delete jobs)<br>• FastAPI/Litestar integration plugins<br>• Documentation and examples |
+| 4     | Advanced Features & Integrations | ✅ Complete | • Asyncio worker support<br>• SQLAlchemy storage (optional)<br>• Interactive Dashboard (retry/delete jobs)<br>• FastAPI/Litestar integration plugins<br>• Documentation and examples |
 | 5     | Polish & Community              | ⏳ To Do    | • More built-in filters<br>• Performance optimizations<br>• Extensive testing<br>• Contrib modules |
 
 This plan provides a solid foundation.

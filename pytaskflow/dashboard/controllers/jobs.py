@@ -3,11 +3,12 @@
 import json
 from uuid import UUID
 
-from litestar import Controller, get
-from litestar.response import Template
+from litestar import Controller, Request, get, post
+from litestar.response import Redirect, Template
 from litestar.di import Provide
 from litestar.datastructures import State
 from litestar.params import Parameter
+from litestar.status_codes import HTTP_303_SEE_OTHER
 
 from pytaskflow.client import Client
 
@@ -28,6 +29,7 @@ class JobsController(Controller):
         client: "Client",
         status: str,
         page: int = Parameter(query="page", default=1),
+        recovered: int | None = Parameter(query="recovered", default=None),
     ) -> Template:
         jobs = client.get_jobs_by_state(status, page=page, page_size=PAGE_SIZE)
         state_counts = client.get_state_counts()
@@ -47,6 +49,8 @@ class JobsController(Controller):
                 "state_counts": state_counts,
                 "active_page": "jobs",
                 "active_status": status,
+                "supports_recovery": hasattr(client.storage, "recover_stuck_jobs"),
+                "recovered_count": recovered,
             },
         )
 
@@ -99,4 +103,43 @@ class JobsController(Controller):
                 "state_counts": state_counts,
                 "active_page": "recurring",
             },
+        )
+
+    @post("/failed/requeue", name="requeue_failed_job")
+    async def requeue_failed_job(self, client: "Client", request: Request) -> Redirect:
+        form = await request.form()
+        job_id = form.get("job_id")
+        if job_id:
+            client.requeue(str(job_id))
+        return Redirect(path="/jobs/Failed", status_code=HTTP_303_SEE_OTHER)
+
+    @post("/failed/delete", name="delete_failed_job")
+    async def delete_failed_job(self, client: "Client", request: Request) -> Redirect:
+        form = await request.form()
+        job_id = form.get("job_id")
+        if job_id:
+            client.delete(str(job_id))
+        return Redirect(path="/jobs/Failed", status_code=HTTP_303_SEE_OTHER)
+
+    @post("/recover-stuck", name="recover_stuck_jobs")
+    async def recover_stuck_jobs(self, client: "Client", request: Request) -> Redirect:
+        if not hasattr(client.storage, "recover_stuck_jobs"):
+            return Redirect(path="/jobs/Processing", status_code=HTTP_303_SEE_OTHER)
+        form = await request.form()
+        max_age_seconds = form.get("max_age_seconds", 300)
+        limit = form.get("limit", 100)
+        try:
+            max_age_seconds = int(max_age_seconds)
+        except (TypeError, ValueError):
+            max_age_seconds = 300
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            limit = 100
+        recovered = client.recover_stuck_jobs(
+            max_age_seconds=max_age_seconds, limit=limit
+        )
+        return Redirect(
+            path=f"/jobs/Processing?recovered={len(recovered)}",
+            status_code=HTTP_303_SEE_OTHER,
         )

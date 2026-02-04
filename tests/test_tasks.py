@@ -15,3 +15,8 @@ def side_effect_task(path, content):
     """A task that writes to a file to check for side effects."""
     with open(path, "w") as f:
         f.write(content)
+
+
+async def async_success_task(x, y):
+    """A simple async task that succeeds."""
+    return x + y

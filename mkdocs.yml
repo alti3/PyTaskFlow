@@ -1,0 +1,32 @@
+site_name: PyTaskFlow
+site_description: Background jobs and workers for Python
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Installation: guide/installation.md
+      - Configuration: guide/configuration.md
+      - Creating Jobs: guide/creating-jobs.md
+      - Processing Jobs: guide/processing-jobs.md
+      - Dashboard: guide/dashboard.md
+      - Storage Backends: guide/storage-backends.md
+  - Integrations:
+      - FastAPI: integrations/fastapi.md
+      - Litestar: integrations/litestar.md
+  - API Reference: api/index.md
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: false

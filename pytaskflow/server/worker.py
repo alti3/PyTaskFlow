@@ -1,10 +1,12 @@
 # pytaskflow/server/worker.py
+import asyncio
+import json
+import logging
 import time
 import uuid
-import logging
-import json
+from datetime import UTC, datetime
+from enum import Enum
 from typing import List, Optional
-from datetime import datetime, UTC
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from cronsim import CronSim
@@ -23,6 +25,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class ConcurrencyMode(Enum):
+    THREADED = "threaded"
+    ASYNCIO = "asyncio"
+
+
 class Worker:
     def __init__(
         self,
@@ -31,6 +38,7 @@ class Worker:
         queues: List[str] = ["default"],
         worker_count: int = 4,
         scheduler_poll_interval_seconds: int = 15,
+        concurrency_mode: ConcurrencyMode = ConcurrencyMode.THREADED,
     ):
         self.storage = storage
         self.serializer = serializer or JsonSerializer()
@@ -42,6 +50,7 @@ class Worker:
         self.scheduler_poll_interval = scheduler_poll_interval_seconds
         self._last_scheduler_run = 0
         self._last_heartbeat = 0
+        self.concurrency_mode = concurrency_mode
 
     def _run_schedulers(self):
         """Runs periodic tasks like enqueuing scheduled jobs."""
@@ -57,6 +66,9 @@ class Worker:
 
     def _enqueue_due_scheduled_jobs(self):
         storage = self.storage
+        if hasattr(storage, "enqueue_due_scheduled_jobs"):
+            storage.enqueue_due_scheduled_jobs()
+            return
         if not isinstance(storage, RedisStorage):  # Phase 2 only supports Redis
             return
 
@@ -85,6 +97,9 @@ class Worker:
     def _enqueue_due_recurring_jobs(self):
         # This entire method should be protected by a distributed lock to ensure only one worker
         # runs the recurring job scheduler at a time.
+        if hasattr(self.storage, "enqueue_due_recurring_jobs"):
+            self.storage.enqueue_due_recurring_jobs()
+            return
         if not isinstance(self.storage, RedisStorage):
             return
 
@@ -164,6 +179,15 @@ class Worker:
 
     def run(self):
         """Starts the worker's processing loop."""
+        if self.concurrency_mode == ConcurrencyMode.THREADED:
+            self._run_threaded()
+            return
+        if self.concurrency_mode == ConcurrencyMode.ASYNCIO:
+            asyncio.run(self._run_async())
+            return
+        raise ValueError(f"Unsupported concurrency mode: {self.concurrency_mode}")
+
+    def _run_threaded(self):
         logger.info(
             f"[{self.worker_id}] Starting worker for queues: {', '.join(self.queues)}"
         )
@@ -229,6 +253,79 @@ class Worker:
                 except Exception as exc:
                     logger.error(
                         f"[{self.worker_id}] Job processor task failed during shutdown: {exc}",
+                        exc_info=True,
+                    )
+
+        self.storage.remove_server(self.server_id)
+        logger.info(f"[{self.worker_id}] Worker has stopped.")
+
+    async def _run_async(self):
+        logger.info(
+            f"[{self.worker_id}] Starting ASYNC worker for queues: {', '.join(self.queues)}"
+        )
+        in_flight_tasks: set[asyncio.Task] = set()
+
+        while not self._shutdown_requested:
+            try:
+                self._send_heartbeat()
+                self._run_schedulers()
+
+                while len(in_flight_tasks) < self.worker_count:
+                    dequeued_job = await asyncio.to_thread(
+                        self.storage.dequeue,
+                        self.queues,
+                        0.1,
+                        self.server_id,
+                        self.worker_id,
+                    )
+                    if not dequeued_job:
+                        break
+
+                    logger.info(
+                        f"[{self.worker_id}] Picked up job {dequeued_job.id} (state: {dequeued_job.state_name}, retry_count: {dequeued_job.retry_count})"
+                    )
+                    processor = JobProcessor(
+                        dequeued_job, self.storage, self.serializer
+                    )
+                    task = asyncio.create_task(processor.process_async())
+                    in_flight_tasks.add(task)
+
+                if not in_flight_tasks:
+                    await asyncio.sleep(0.05)
+                    continue
+
+                done, _pending = await asyncio.wait(
+                    in_flight_tasks,
+                    timeout=0.1,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                for task in done:
+                    in_flight_tasks.discard(task)
+                    try:
+                        task.result()
+                    except Exception as exc:
+                        logger.error(
+                            f"[{self.worker_id}] Job processor task failed: {exc}",
+                            exc_info=True,
+                        )
+
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                logger.info(f"[{self.worker_id}] Shutdown requested...")
+                self._shutdown_requested = True
+            except Exception as e:
+                logger.error(
+                    f"[{self.worker_id}] Unhandled exception in async worker loop: {e}",
+                    exc_info=True,
+                )
+                await asyncio.sleep(5)
+
+        if in_flight_tasks:
+            results = await asyncio.gather(*in_flight_tasks, return_exceptions=True)
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error(
+                        f"[{self.worker_id}] Job processor task failed during shutdown: {result}",
                         exc_info=True,
                     )
 

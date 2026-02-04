@@ -1,17 +1,19 @@
 # pytaskflow/server/processor.py
-import traceback
+import asyncio
 import logging
+import traceback
+
 from pytaskflow.common.job import Job
 from pytaskflow.common.states import (
-    SucceededState,
+    EnqueuedState,
     FailedState,
     ProcessingState,
-    EnqueuedState,
+    SucceededState,
 )
-from pytaskflow.execution.performer import perform_job
-from pytaskflow.storage.base import JobStorage
-from pytaskflow.serialization.base import BaseSerializer
 from pytaskflow.common.exceptions import JobLoadError
+from pytaskflow.execution.performer import perform_job, perform_job_async
+from pytaskflow.serialization.base import BaseSerializer
+from pytaskflow.storage.base import JobStorage
 from ..filters.builtin import RetryFilter
 from .context import ElectStateContext
 
@@ -96,3 +98,71 @@ class JobProcessor:
             # the processing list back to a queue.
             if final_state and not isinstance(final_state, EnqueuedState):
                 self.storage.acknowledge(self.job.id)
+
+    async def process_async(self):
+        final_state = None
+        try:
+            args, kwargs = self.serializer.deserialize_args(
+                self.job.args, self.job.kwargs
+            )
+
+            result = await perform_job_async(
+                self.job.target_module, self.job.target_function, args, kwargs
+            )
+
+            succeeded_state = SucceededState(
+                result=result, reason="Job performed successfully"
+            )
+            await asyncio.to_thread(
+                self.storage.set_job_state,
+                self.job.id,
+                succeeded_state,
+                ProcessingState.NAME,
+            )
+            final_state = succeeded_state
+
+        except (Exception, JobLoadError) as e:
+            logger.error(f"Job {self.job.id} failed.", exc_info=True)
+            exc_type = type(e).__name__
+            exc_msg = str(e)
+            exc_details = traceback.format_exc()
+
+            failed_state = FailedState(
+                exception_type=exc_type,
+                exception_message=exc_msg,
+                exception_details=exc_details,
+            )
+
+            elect_state_context = ElectStateContext(
+                job=self.job, candidate_state=failed_state
+            )
+            logger.debug(
+                f"Job {self.job.id}: Before filters, retry_count={self.job.retry_count}, candidate_state={elect_state_context.candidate_state.name}"
+            )
+
+            for f in self.filters:
+                f.on_state_election(elect_state_context)
+
+            final_state = elect_state_context.candidate_state
+            logger.debug(
+                f"Job {self.job.id}: After filters, retry_count={self.job.retry_count}, final_state={final_state.name}"
+            )
+
+            if isinstance(final_state, EnqueuedState):
+                await asyncio.to_thread(
+                    self.storage.update_job_field,
+                    self.job.id,
+                    "retry_count",
+                    self.job.retry_count,
+                )
+
+            await asyncio.to_thread(
+                self.storage.set_job_state,
+                self.job.id,
+                final_state,
+                ProcessingState.NAME,
+            )
+
+        finally:
+            if final_state and not isinstance(final_state, EnqueuedState):
+                await asyncio.to_thread(self.storage.acknowledge, self.job.id)

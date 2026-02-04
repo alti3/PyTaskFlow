@@ -3,7 +3,7 @@ from typing import Callable, Any, Optional, List, Dict
 from datetime import datetime, UTC
 
 from .common.job import Job
-from .common.states import EnqueuedState, ScheduledState, DeletedState
+from .common.states import DeletedState, EnqueuedState, FailedState, ScheduledState
 from .storage.base import JobStorage
 from .storage.redis_storage import RedisStorage
 from .serialization.base import BaseSerializer
@@ -92,6 +92,22 @@ class BackgroundJobClient:
         return self.storage.set_job_state(
             job_id, DeletedState(reason="Manually deleted")
         )
+
+    def requeue(self, job_id: str) -> bool:
+        job = self.storage.get_job_data(job_id)
+        if not job:
+            return False
+        return self.storage.set_job_state(
+            job_id,
+            EnqueuedState(queue=job.queue),
+            expected_old_state=FailedState.NAME,
+        )
+
+    def recover_stuck_jobs(self, max_age_seconds: int, limit: int = 100) -> List[str]:
+        recover = getattr(self.storage, "recover_stuck_jobs", None)
+        if not recover:
+            return []
+        return recover(max_age_seconds=max_age_seconds, limit=limit)
 
     # --- Dashboard Methods ---
 
