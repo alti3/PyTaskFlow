@@ -113,7 +113,7 @@ sequenceDiagram
     participant Queue
     participant Processing
 
-    Worker->>Storage: dequeue()
+    Worker->>Storage: dequeue(server_id, worker_id)
     alt Redis storage
         Storage->>Queue: atomic_brpop_and_move (Lua script)
         Queue-->>Storage: job_id
@@ -163,7 +163,7 @@ sequenceDiagram
     *   `add_recurring_job(recurring_job_id: str, job_template: Job, cron_expression: str, timezone: Optional[str] = None, queue: Optional[str] = None)`
     *   `remove_recurring_job(recurring_job_id: str)`
     *   `trigger_recurring_job(recurring_job_id: str)`
-    *   `dequeue(queues: List[str], timeout: timedelta) -> Optional[Job]`: Fetches next job, marks as Processing. This needs to be atomic.
+    *   `dequeue(queues: List[str], timeout_seconds: int, server_id: str, worker_id: str) -> Optional[Job]`: Fetches next job, marks as Processing. This needs to be atomic.
     *   `acknowledge(job_id: str)`: Marks job as fully processed (e.g., remove from processing list if using Redis RPOPLPUSH).
     *   `requeue(job_id: str)`: Moves job back to its queue (e.g., on worker crash).
     *   `set_job_state(job_id: str, state_name: str, state_data: Optional[dict] = None, expected_old_state: Optional[str] = None) -> bool`
@@ -206,7 +206,7 @@ sequenceDiagram
     *   Takes `JobStorage`, `Serializer`, `list_of_queues_to_listen_to`, `worker_count` (for threads/processes).
     *   `run()`: Main loop.
         *   Periodically send heartbeat to storage.
-        *   Polls `storage.dequeue()` for jobs.
+        *   Polls `storage.dequeue(..., server_id, worker_id)` for jobs.
         *   If a job is found, passes it to a `JobProcessor`.
         *   Handles graceful shutdown (signals, `KeyboardInterrupt`).
     *   **Concurrency:**

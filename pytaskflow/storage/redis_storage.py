@@ -363,7 +363,9 @@ class RedisStorage(JobStorage):
         )
         self.enqueue(job_instance)
 
-    def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
+    def dequeue(
+        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+    ) -> Optional[Job]:
         if not queues:
             return None
 
@@ -382,7 +384,7 @@ class RedisStorage(JobStorage):
         processing_list = f"pytaskflow:queue:{queue_name}:processing"
         self.redis_client.lpush(processing_list, job_id)
 
-        processing_state = ProcessingState("server-redis", "worker-1")
+        processing_state = ProcessingState(server_id, worker_id)
         self.set_job_state(job_id, processing_state, expected_old_state=EnqueuedState.NAME)
         job = self.get_job_data(job_id)
         if not job:

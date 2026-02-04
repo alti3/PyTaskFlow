@@ -176,7 +176,10 @@ class Worker:
 
                     while len(in_flight_futures) < self.worker_count:
                         dequeued_job = self.storage.dequeue(
-                            self.queues, timeout_seconds=0.1
+                            self.queues,
+                            timeout_seconds=0.1,
+                            server_id=self.server_id,
+                            worker_id=self.worker_id,
                         )
                         if not dequeued_job:
                             break

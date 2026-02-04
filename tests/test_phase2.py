@@ -88,7 +88,9 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     assert stored_job_data["target_function"] == "success_task"
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == [job_id]
 
-    dequeued_job = redis_storage.dequeue(["default"], timeout_seconds=1)
+    dequeued_job = redis_storage.dequeue(
+        ["default"], timeout_seconds=1, server_id="server-test", worker_id="worker-test"
+    )
     assert dequeued_job.id == job.id
     assert (
         dequeued_job.state_name == ProcessingState.NAME
@@ -102,7 +104,15 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue
-    assert redis_storage.dequeue(["default"], timeout_seconds=0.1) is None
+    assert (
+        redis_storage.dequeue(
+            ["default"],
+            timeout_seconds=0.1,
+            server_id="server-test",
+            worker_id="worker-test",
+        )
+        is None
+    )
 
 
 def test_redis_storage_set_job_state(redis_storage, redis_client):
@@ -143,7 +153,9 @@ def test_redis_storage_acknowledge(redis_storage, redis_client):
         state_name=EnqueuedState.NAME,
     )
     redis_storage.enqueue(job)
-    dequeued_job = redis_storage.dequeue(["default"], timeout_seconds=1)
+    dequeued_job = redis_storage.dequeue(
+        ["default"], timeout_seconds=1, server_id="server-test", worker_id="worker-test"
+    )
     assert dequeued_job.id == job.id
 
     redis_storage.acknowledge(job.id)
@@ -377,7 +389,12 @@ def test_redis_storage_dequeue_prioritizes_queues(redis_storage, redis_client):
     redis_storage.enqueue(high_prio_job)
 
     # 3. Dequeue with 'critical' as the higher priority queue
-    dequeued_job = redis_storage.dequeue(queues=["critical", "low"], timeout_seconds=2)
+    dequeued_job = redis_storage.dequeue(
+        queues=["critical", "low"],
+        timeout_seconds=2,
+        server_id="server-test",
+        worker_id="worker-test",
+    )
 
     # 4. Assert that the high-priority job was dequeued, not the low-priority one
     assert dequeued_job is not None

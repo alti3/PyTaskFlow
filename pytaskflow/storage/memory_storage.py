@@ -89,7 +89,9 @@ class MemoryStorage(JobStorage):
             )
             self.enqueue(job_instance)
 
-    def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
+    def dequeue(
+        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+    ) -> Optional[Job]:
         with self._lock:
             start_time = time.monotonic()
             while True:  # This loop will now work as intended
@@ -98,9 +100,7 @@ class MemoryStorage(JobStorage):
                         job_id = self._queues[queue_name].popleft()
                         job = self._jobs[job_id]
 
-                        self.set_job_state(
-                            job.id, ProcessingState("server-mvp", "worker-1")
-                        )
+                        self.set_job_state(job.id, ProcessingState(server_id, worker_id))
                         self._processing[job.id] = job
                         return job
 

@@ -190,14 +190,24 @@ def test_memory_storage_enqueue_dequeue(memory_storage):
     job_id = memory_storage.enqueue(job)
     assert job_id == job.id
 
-    dequeued_job = memory_storage.dequeue(["default"], timeout_seconds=1)
+    dequeued_job = memory_storage.dequeue(
+        ["default"], timeout_seconds=1, server_id="server-test", worker_id="worker-test"
+    )
     assert dequeued_job.id == job.id
     assert (
         dequeued_job.state_name == ProcessingState.NAME
     )  # State should change to Processing
 
     # Ensure it's removed from the queue
-    assert memory_storage.dequeue(["default"], timeout_seconds=0.1) is None
+    assert (
+        memory_storage.dequeue(
+            ["default"],
+            timeout_seconds=0.1,
+            server_id="server-test",
+            worker_id="worker-test",
+        )
+        is None
+    )
 
 
 def test_memory_storage_set_job_state(memory_storage):
@@ -236,7 +246,9 @@ def test_memory_storage_acknowledge(memory_storage):
         state_name=EnqueuedState.NAME,
     )
     memory_storage.enqueue(job)
-    dequeued_job = memory_storage.dequeue(["default"], timeout_seconds=1)
+    dequeued_job = memory_storage.dequeue(
+        ["default"], timeout_seconds=1, server_id="server-test", worker_id="worker-test"
+    )
     assert dequeued_job.id == job.id
 
     memory_storage.acknowledge(job.id)
