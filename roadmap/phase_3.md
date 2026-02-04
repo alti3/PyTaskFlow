@@ -187,7 +187,7 @@ def create_dashboard_app(storage: JobStorage) -> FastAPI:
 ```
 
 #### 2.3. Templates (`pytaskflow/dashboard/templates/`)
-Create basic Jinja2 templates.
+Create basic Jinja2 templates styled with Tailwind CSS v4.
 
 `layout.html`:
 ```html
@@ -195,15 +195,15 @@ Create basic Jinja2 templates.
 <html>
 <head>
     <title>PyTaskFlow Dashboard</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">PyTaskFlow</a>
+<body class="min-h-screen bg-slate-50 text-slate-900">
+    <nav class="border-b border-slate-200 bg-white">
+        <div class="mx-auto flex h-16 max-w-6xl items-center px-6">
+            <a class="text-lg font-semibold" href="/">PyTaskFlow</a>
         </div>
     </nav>
-    <div class="container mt-4">
+    <div class="mx-auto max-w-6xl px-6 py-6">
         {% block content %}{% endblock %}
     </div>
 </body>
@@ -214,20 +214,29 @@ Create basic Jinja2 templates.
 ```html
 {% extends "layout.html" %}
 {% block content %}
-<h1>Dashboard</h1>
-<div class="row">
-    <div class="col-md-2">
-        <div class="card text-center">
-            <div class="card-body">
-                <h5 class="card-title">Succeeded</h5>
-                <p class="card-text fs-2">{{ stats.succeeded }}</p>
-                <a href="/jobs/Succeeded" class="btn btn-sm btn-success">View</a>
-            </div>
-        </div>
+<h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+<div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+        <h5 class="text-sm font-medium text-slate-500">Succeeded</h5>
+        <p class="mt-2 text-3xl font-semibold">{{ stats.succeeded }}</p>
+        <a href="/jobs/Succeeded" class="mt-3 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">View</a>
     </div>
-    <div class="col-md-2">
-        <div class="card text-center">
-            <div class="card-body">
+    <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+        <h5 class="text-sm font-medium text-slate-500">Failed</h5>
+        <p class="mt-2 text-3xl font-semibold">{{ stats.failed }}</p>
+        <a href="/jobs/Failed" class="mt-3 inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">View</a>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+        <h5 class="text-sm font-medium text-slate-500">Processing</h5>
+        <p class="mt-2 text-3xl font-semibold">{{ stats.processing }}</p>
+        <a href="/jobs/Processing" class="mt-3 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">View</a>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm">
+        <h5 class="text-sm font-medium text-slate-500">Enqueued</h5>
+        <p class="mt-2 text-3xl font-semibold">{{ stats.enqueued }}</p>
+        <a href="/jobs/Enqueued" class="mt-3 inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">View</a>
+    </div>
+</div>
                 <h5 class="card-title">Failed</h5>
                 <p class="card-text fs-2 text-danger">{{ stats.failed }}</p>
                 <a href="/jobs/Failed" class="btn btn-sm btn-danger">View</a>
