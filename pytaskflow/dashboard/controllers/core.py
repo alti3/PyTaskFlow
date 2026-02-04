@@ -20,13 +20,18 @@ class CoreController(Controller):
         stats = client.get_state_counts()
         return Template(
             template_name="index.html.j2",
-            context={"stats": stats, "active_page": "home"},
+            context={"stats": stats, "state_counts": stats, "active_page": "home"},
         )
 
     @get("/servers", name="servers")
     async def servers(self, client: "Client") -> Template:
         servers_list = client.get_servers()
+        state_counts = client.get_state_counts()
         return Template(
             template_name="servers.html.j2",
-            context={"servers": servers_list, "active_page": "servers"},
+            context={
+                "servers": servers_list,
+                "state_counts": state_counts,
+                "active_page": "servers",
+            },
         )

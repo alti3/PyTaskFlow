@@ -21,7 +21,12 @@
                     {% if jobs %}
                         {% for job in jobs %}
                             <tr class="transition hover:bg-slate-50">
-                                <td class="px-4 py-3 text-xs font-medium text-slate-500">{{ job.id }}</td>
+                                <td class="border-l-4 border-indigo-200 px-4 py-3 text-xs font-medium text-slate-500">
+                                    <span class="inline-flex items-center gap-2">
+                                        <span class="h-2 w-2 rounded-full bg-indigo-500"></span>
+                                        {{ job.id }}
+                                    </span>
+                                </td>
                                 <td class="px-4 py-3 text-sm text-slate-700">
                                     <code class="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ job.job.target_module }}.{{ job.job.target_function }}</code>
                                 </td>

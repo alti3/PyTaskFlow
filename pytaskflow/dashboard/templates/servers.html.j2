@@ -22,7 +22,12 @@
                     {% if servers %}
                         {% for server in servers %}
                             <tr class="transition hover:bg-slate-50">
-                                <td class="px-4 py-3 text-xs font-medium text-slate-500">{{ server.id }}</td>
+                                <td class="border-l-4 border-emerald-200 px-4 py-3 text-xs font-medium text-slate-500">
+                                    <span class="inline-flex items-center gap-2">
+                                        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                                        {{ server.id }}
+                                    </span>
+                                </td>
                                 <td class="px-4 py-3 text-sm text-slate-600">{{ server.worker_count }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-600">{{ server.queues | join(", ") }}</td>
                                 <td class="px-4 py-3 text-sm text-slate-600">{{ server.last_heartbeat }}</td>

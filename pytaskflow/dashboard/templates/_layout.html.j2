@@ -13,6 +13,7 @@
 <body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
     {% set active_page = active_page | default("") %}
     {% set active_status = active_status | default("") | lower %}
+    {% set state_counts = state_counts | default({}) %}
     {% set nav_base = "rounded-full border px-3 py-1.5 font-medium transition" %}
     {% set nav_inactive = "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-900" %}
     {% set nav_active = "border-slate-900 bg-slate-900 text-white" %}
@@ -74,6 +75,22 @@
                         {% set is_active = active_page == "servers" %}
                         <a class="{{ nav_base }} {{ nav_active if is_active else nav_inactive }}" href="{{ url_for('servers') }}" aria-current="{{ 'page' if is_active else 'false' }}">Servers</a>
                     </nav>
+                    <div class="flex flex-wrap items-center gap-2 pb-4 text-xs">
+                        {% set summary = [
+                            ("Enqueued", "enqueued", "border-sky-200 bg-sky-50 text-sky-700", "bg-sky-500"),
+                            ("Processing", "processing", "border-amber-200 bg-amber-50 text-amber-700", "bg-amber-500"),
+                            ("Succeeded", "succeeded", "border-emerald-200 bg-emerald-50 text-emerald-700", "bg-emerald-500"),
+                            ("Failed", "failed", "border-rose-200 bg-rose-50 text-rose-700", "bg-rose-500"),
+                        ] %}
+                        {% for label, key, badge_classes, dot_classes in summary %}
+                            {% set count = state_counts.get(label, state_counts.get(key, 0)) %}
+                            <span class="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-semibold {{ badge_classes }}">
+                                <span class="h-2 w-2 rounded-full {{ dot_classes }}"></span>
+                                <span class="uppercase tracking-wide">{{ label }}</span>
+                                <span class="rounded-full bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">{{ count }}</span>
+                            </span>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
         </header>

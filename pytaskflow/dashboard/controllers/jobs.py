@@ -29,7 +29,8 @@ class JobsController(Controller):
         page: int = Parameter(query="page", default=1),
     ) -> Template:
         jobs = client.get_jobs_by_state(status, page=page, page_size=PAGE_SIZE)
-        total_count = client.get_state_counts().get(status, 0)
+        state_counts = client.get_state_counts()
+        total_count = state_counts.get(status, 0)
         total_pages = max(1, (total_count + PAGE_SIZE - 1) // PAGE_SIZE)
         has_prev = page > 1
         has_next = page < total_pages
@@ -42,6 +43,7 @@ class JobsController(Controller):
                 "total_pages": total_pages,
                 "has_prev": has_prev,
                 "has_next": has_next,
+                "state_counts": state_counts,
                 "active_page": "jobs",
                 "active_status": status,
             },
@@ -54,6 +56,7 @@ class JobsController(Controller):
         kwargs = {}
         state_data = {}
         history = []
+        state_counts = client.get_state_counts()
         if job:
             try:
                 args, kwargs = client.serializer.deserialize_args(job.args, job.kwargs)
@@ -75,6 +78,7 @@ class JobsController(Controller):
                 "kwargs": kwargs,
                 "state_data": state_data,
                 "history": history,
+                "state_counts": state_counts,
                 "active_page": "jobs",
                 "active_status": job.state_name if job else "",
             },
@@ -85,7 +89,13 @@ class JobsController(Controller):
         self, client: "Client", page: int = Parameter(query="page", default=1)
     ) -> Template:
         jobs = client.get_recurring_jobs(page=page, page_size=PAGE_SIZE)
+        state_counts = client.get_state_counts()
         return Template(
             template_name="recurring.html.j2",
-            context={"jobs": jobs, "page": page, "active_page": "recurring"},
+            context={
+                "jobs": jobs,
+                "page": page,
+                "state_counts": state_counts,
+                "active_page": "recurring",
+            },
         )
