@@ -1,13 +1,16 @@
-<nav aria-label="Page navigation">
-    <ul class="pagination justify-content-center">
-        <li class="page-item {% if not has_prev %}disabled{% endif %}">
-            <a class="page-link" href="{{ url_for('list_jobs_by_status', status=status, page=page-1) if has_prev else '#' }}" tabindex="-1" aria-disabled="{{ not has_prev }}">Previous</a>
-        </li>
-        <li class="page-item disabled">
-            <span class="page-link">Page {{ page }} of {{ total_pages }}</span>
-        </li>
-        <li class="page-item {% if not has_next %}disabled{% endif %}">
-            <a class="page-link" href="{{ url_for('list_jobs_by_status', status=status, page=page+1) if has_next else '#' }}">Next</a>
-        </li>
-    </ul>
+{% set prev_classes = "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100" %}
+{% if not has_prev %}
+    {% set prev_classes = prev_classes + " pointer-events-none opacity-50" %}
+{% endif %}
+{% set next_classes = "inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100" %}
+{% if not has_next %}
+    {% set next_classes = next_classes + " pointer-events-none opacity-50" %}
+{% endif %}
+
+<nav aria-label="Page navigation" class="flex justify-center">
+    <div class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 shadow-sm">
+        <a class="{{ prev_classes }}" href="{{ url_for('list_jobs_by_status', status=status, page=page-1) if has_prev else '#' }}" tabindex="-1" aria-disabled="{{ not has_prev }}">Previous</a>
+        <span class="px-3 text-xs font-medium text-slate-500">Page {{ page }} of {{ total_pages }}</span>
+        <a class="{{ next_classes }}" href="{{ url_for('list_jobs_by_status', status=status, page=page+1) if has_next else '#' }}">Next</a>
+    </div>
 </nav>

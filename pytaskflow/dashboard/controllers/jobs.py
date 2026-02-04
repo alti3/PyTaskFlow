@@ -1,24 +1,27 @@
 """Job-related dashboard routes."""
 import json
-from typing import TYPE_CHECKING
 from uuid import UUID
 
 from litestar import Controller, get
 from litestar.response import Template
 from litestar.di import Provide
+from litestar.datastructures import State
 from litestar.params import Parameter
 
-if TYPE_CHECKING:
-    from pytaskflow.client import Client
+from pytaskflow.client import Client
 
 PAGE_SIZE = 20
 
 
+def get_client(state: State) -> Client:
+    return state.client
+
+
 class JobsController(Controller):
     path = "/jobs"
-    dependencies = {"client": Provide(lambda state: state.client)}
+    dependencies = {"client": Provide(get_client, sync_to_thread=False)}
 
-    @get("/{status:str}")
+    @get("/{status:str}", name="list_jobs_by_status")
     async def list_jobs_by_status(
         self,
         client: "Client",
@@ -31,7 +34,7 @@ class JobsController(Controller):
         has_prev = page > 1
         has_next = page < total_pages
         return Template(
-            name="jobs_list.html.j2",
+            template_name="jobs_list.html.j2",
             context={
                 "jobs": jobs,
                 "status": status,
@@ -39,10 +42,12 @@ class JobsController(Controller):
                 "total_pages": total_pages,
                 "has_prev": has_prev,
                 "has_next": has_next,
+                "active_page": "jobs",
+                "active_status": status,
             },
         )
 
-    @get("/details/{job_id:uuid}")
+    @get("/details/{job_id:uuid}", name="job_details")
     async def job_details(self, client: "Client", job_id: UUID) -> Template:
         job = client.get_job_details(str(job_id))
         args = []
@@ -63,22 +68,24 @@ class JobsController(Controller):
             history = json.loads(json.dumps(history, default=str))
 
         return Template(
-            name="job_details.html.j2",
+            template_name="job_details.html.j2",
             context={
                 "job": job,
                 "args": args,
                 "kwargs": kwargs,
                 "state_data": state_data,
                 "history": history,
+                "active_page": "jobs",
+                "active_status": job.state_name if job else "",
             },
         )
 
-    @get("/recurring")
+    @get("/recurring", name="recurring_jobs")
     async def recurring_jobs(
         self, client: "Client", page: int = Parameter(query="page", default=1)
     ) -> Template:
         jobs = client.get_recurring_jobs(page=page, page_size=PAGE_SIZE)
         return Template(
-            name="recurring.html.j2",
-            context={"jobs": jobs, "page": page},
+            template_name="recurring.html.j2",
+            context={"jobs": jobs, "page": page, "active_page": "recurring"},
         )
