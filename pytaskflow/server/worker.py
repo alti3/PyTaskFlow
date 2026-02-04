@@ -5,6 +5,7 @@ import logging
 import json
 from typing import List, Optional
 from datetime import datetime, UTC
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from cronsim import CronSim
 
@@ -28,16 +29,19 @@ class Worker:
         storage: JobStorage,
         serializer: Optional[BaseSerializer] = None,
         queues: List[str] = ["default"],
+        worker_count: int = 4,
         scheduler_poll_interval_seconds: int = 15,
     ):
         self.storage = storage
         self.serializer = serializer or JsonSerializer()
         self.queues = queues
+        self.worker_count = worker_count
         self.server_id = f"server:{uuid.uuid4()}"
         self.worker_id = f"worker:{uuid.uuid4()}"
         self._shutdown_requested = False
         self.scheduler_poll_interval = scheduler_poll_interval_seconds
         self._last_scheduler_run = 0
+        self._last_heartbeat = 0
 
     def _run_schedulers(self):
         """Runs periodic tasks like enqueuing scheduled jobs."""
@@ -65,6 +69,7 @@ class Worker:
                 args=[
                     now_timestamp,
                     EnqueuedState.NAME,
+                    datetime.now(UTC).isoformat(),
                 ],
             )
 
@@ -150,46 +155,82 @@ class Worker:
         finally:
             self.storage.redis_client.delete(lock_key)
 
+    def _send_heartbeat(self):
+        now = time.monotonic()
+        if (now - self._last_heartbeat) < 30:
+            return
+        self.storage.server_heartbeat(self.server_id, self.worker_count, self.queues)
+        self._last_heartbeat = now
+
     def run(self):
         """Starts the worker's processing loop."""
         logger.info(
             f"[{self.worker_id}] Starting worker for queues: {', '.join(self.queues)}"
         )
-        while not self._shutdown_requested:
-            try:
-                self._run_schedulers()
-                # 1. Dequeue a job
-                dequeued_job = self.storage.dequeue(self.queues, timeout_seconds=0.1)
-                if dequeued_job:
-                    # Fetch the latest job data from storage to ensure retry_count is up-to-date
-                    job = self.storage.get_job_data(dequeued_job.id)
-                    if (
-                        not job
-                    ):  # Job might have been deleted or moved by another process
-                        logger.warning(
-                            f"[{self.worker_id}] Dequeued job {dequeued_job.id} not found in storage. Skipping."
+        with ThreadPoolExecutor(max_workers=self.worker_count) as executor:
+            in_flight_futures: set = set()
+            while not self._shutdown_requested:
+                try:
+                    self._send_heartbeat()
+                    self._run_schedulers()
+
+                    while len(in_flight_futures) < self.worker_count:
+                        dequeued_job = self.storage.dequeue(
+                            self.queues,
+                            timeout_seconds=0.1,
+                            server_id=self.server_id,
+                            worker_id=self.worker_id,
                         )
+                        if not dequeued_job:
+                            break
+
+                        logger.info(
+                            f"[{self.worker_id}] Picked up job {dequeued_job.id} (state: {dequeued_job.state_name}, retry_count: {dequeued_job.retry_count})"
+                        )
+                        processor = JobProcessor(
+                            dequeued_job, self.storage, self.serializer
+                        )
+                        in_flight_futures.add(executor.submit(processor.process))
+
+                    if not in_flight_futures:
+                        time.sleep(0.05)
                         continue
 
-                    logger.info(
-                        f"[{self.worker_id}] Picked up job {job.id} (state: {job.state_name}, retry_count: {job.retry_count})"
+                    try:
+                        done_futures = set(
+                            f for f in as_completed(in_flight_futures, timeout=0.1)
+                        )
+                    except TimeoutError:
+                        done_futures = set()
+
+                    for future in done_futures:
+                        in_flight_futures.remove(future)
+                        try:
+                            future.result()
+                        except Exception as exc:
+                            logger.error(
+                                f"[{self.worker_id}] Job processor task failed: {exc}",
+                                exc_info=True,
+                            )
+
+                except KeyboardInterrupt:
+                    logger.info(f"[{self.worker_id}] Shutdown requested...")
+                    self._shutdown_requested = True
+                except Exception as e:
+                    logger.error(
+                        f"[{self.worker_id}] Unhandled exception in worker loop: {e}",
+                        exc_info=True,
                     )
-                    # 2. Process it
-                    processor = JobProcessor(job, self.storage, self.serializer)
-                    processor.process()
-                    updated_job = self.storage.get_job_data(job.id)
-                    logger.info(
-                        f"[{self.worker_id}] Finished processing job {job.id}. New state: {updated_job.state_name}, retry_count: {updated_job.retry_count}"
+                    time.sleep(5)  # Cooldown period after a major failure
+
+            for future in as_completed(in_flight_futures):
+                try:
+                    future.result()
+                except Exception as exc:
+                    logger.error(
+                        f"[{self.worker_id}] Job processor task failed during shutdown: {exc}",
+                        exc_info=True,
                     )
 
-            except KeyboardInterrupt:
-                logger.info(f"[{self.worker_id}] Shutdown requested...")
-                self._shutdown_requested = True
-            except Exception as e:
-                logger.error(
-                    f"[{self.worker_id}] Unhandled exception in worker loop: {e}",
-                    exc_info=True,
-                )
-                time.sleep(5)  # Cooldown period after a major failure
-
+        self.storage.remove_server(self.server_id)
         logger.info(f"[{self.worker_id}] Worker has stopped.")

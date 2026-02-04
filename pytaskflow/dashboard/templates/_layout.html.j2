@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PyTaskFlow Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="/static/css/pytaskflow.css">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
+    {% set active_page = active_page | default("") %}
+    {% set active_status = active_status | default("") | lower %}
+    {% set state_counts = state_counts | default({}) %}
+    {% set nav_base = "rounded-full border px-3 py-1.5 font-medium transition" %}
+    {% set nav_inactive = "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-100 hover:text-slate-900" %}
+    {% set nav_active = "border-slate-900 bg-slate-900 text-white" %}
+    {% set status_active_classes = {
+        "enqueued": "border-sky-200 bg-sky-50 text-sky-700",
+        "processing": "border-amber-200 bg-amber-50 text-amber-700",
+        "succeeded": "border-emerald-200 bg-emerald-50 text-emerald-700",
+        "failed": "border-rose-200 bg-rose-50 text-rose-700",
+        "deleted": "border-slate-200 bg-slate-100 text-slate-700",
+        "awaiting": "border-indigo-200 bg-indigo-50 text-indigo-700",
+        "cancelled": "border-orange-200 bg-orange-50 text-orange-700",
+    } %}
+    <div class="min-h-screen flex flex-col">
+        <header class="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+            <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <span class="text-sm font-semibold tracking-tight">PT</span>
+                    </div>
+                    <div>
+                        <a class="text-lg font-semibold tracking-tight" href="{{ url_for('home') }}">PyTaskFlow</a>
+                        <p class="text-xs text-slate-500">Background jobs, live visibility</p>
+                    </div>
+                </div>
+                <div class="hidden md:flex items-center gap-2 text-xs text-slate-500">
+                    <span class="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-medium">Dashboard</span>
+                    <span class="text-slate-300">•</span>
+                    <span>v0.1</span>
+                </div>
+            </div>
+            <div class="border-t border-slate-200 bg-white">
+                <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                    <nav class="flex flex-wrap items-center gap-2 py-3 text-sm">
+                        {% set is_active = active_page == "home" %}
+                        <a class="{{ nav_base }} {{ nav_active if is_active else nav_inactive }}" href="{{ url_for('home') }}" aria-current="{{ 'page' if is_active else 'false' }}">Overview</a>
+                        {% set item_status = "enqueued" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Enqueued') }}" aria-current="{{ 'page' if is_active else 'false' }}">Enqueued</a>
+                        {% set item_status = "processing" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Processing') }}" aria-current="{{ 'page' if is_active else 'false' }}">Processing</a>
+                        {% set item_status = "succeeded" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Succeeded') }}" aria-current="{{ 'page' if is_active else 'false' }}">Succeeded</a>
+                        {% set item_status = "failed" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Failed') }}" aria-current="{{ 'page' if is_active else 'false' }}">Failed</a>
+                        {% set item_status = "deleted" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Deleted') }}" aria-current="{{ 'page' if is_active else 'false' }}">Deleted</a>
+                        {% set item_status = "awaiting" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Awaiting') }}" aria-current="{{ 'page' if is_active else 'false' }}">Awaiting</a>
+                        {% set item_status = "cancelled" %}
+                        {% set is_active = active_page == "jobs" and active_status == item_status %}
+                        <a class="{{ nav_base }} {{ status_active_classes.get(item_status, nav_active) if is_active else nav_inactive }}" href="{{ url_for('list_jobs_by_status', status='Cancelled') }}" aria-current="{{ 'page' if is_active else 'false' }}">Cancelled</a>
+                        {% set is_active = active_page == "recurring" %}
+                        <a class="{{ nav_base }} {{ nav_active if is_active else nav_inactive }}" href="{{ url_for('recurring_jobs') }}" aria-current="{{ 'page' if is_active else 'false' }}">Recurring</a>
+                        {% set is_active = active_page == "servers" %}
+                        <a class="{{ nav_base }} {{ nav_active if is_active else nav_inactive }}" href="{{ url_for('servers') }}" aria-current="{{ 'page' if is_active else 'false' }}">Servers</a>
+                    </nav>
+                    <div class="flex flex-wrap items-center gap-2 pb-4 text-xs">
+                        {% set summary = [
+                            ("Enqueued", "enqueued", "border-sky-200 bg-sky-50 text-sky-700", "bg-sky-500"),
+                            ("Processing", "processing", "border-amber-200 bg-amber-50 text-amber-700", "bg-amber-500 processing-pulse"),
+                            ("Succeeded", "succeeded", "border-emerald-200 bg-emerald-50 text-emerald-700", "bg-emerald-500"),
+                            ("Failed", "failed", "border-rose-200 bg-rose-50 text-rose-700", "bg-rose-500"),
+                        ] %}
+                        {% for label, key, badge_classes, dot_classes in summary %}
+                            {% set count = state_counts.get(label, state_counts.get(key, 0)) %}
+                            <span class="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 font-semibold {{ badge_classes }}">
+                                <span class="h-2 w-2 rounded-full {{ dot_classes }}"></span>
+                                <span class="uppercase tracking-wide">{{ label }}</span>
+                                <span class="rounded-full bg-white/70 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">{{ count }}</span>
+                            </span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1">
+            <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+
+        <footer class="border-t border-slate-200 bg-white">
+            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 text-xs text-slate-500 sm:px-6 lg:px-8">
+                <span>PyTaskFlow Dashboard</span>
+                <span>Operational clarity for background work</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

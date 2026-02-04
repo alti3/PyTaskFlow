@@ -1,6 +1,0 @@
-- You cannot edit this file.
-- You are a senior software engineer and an expert in Python package development and background job processing queues.
-- Use `uv run` instead of `python -m` or `python3` to run the code.
-- Use `uv run pytest -v` to run tests and get detailed verbose output.
-- Use `uvx` to run Python CLI tools.
-- Use `uv add` to add dependencies instead of `pip install`.

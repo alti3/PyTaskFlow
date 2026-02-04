@@ -8,7 +8,12 @@ from datetime import datetime, UTC
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.common.job import Job
-from pytaskflow.common.states import BaseState, ProcessingState, EnqueuedState
+from pytaskflow.common.states import (
+    BaseState,
+    ProcessingState,
+    EnqueuedState,
+    ALL_STATES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +25,18 @@ class MemoryStorage(JobStorage):
         self._processing: Dict[str, Job] = {}  # Jobs currently being processed
         self._scheduled: Dict[str, datetime] = {}  # job_id -> enqueue_at
         self._recurring_jobs: Dict[str, dict] = {}  # recurring_job_id -> job data
+        self._history: Dict[str, List[dict]] = {}
+        self._servers: Dict[str, dict] = {}
         self._lock = RLock()
         self._condition = Condition(self._lock)
+
+    def _record_history(self, job_id: str, state_name: str, state_data: Dict[str, Any]):
+        entry = {
+            "state": state_name,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "data": state_data,
+        }
+        self._history.setdefault(job_id, []).append(entry)
 
     def enqueue(self, job: Job) -> str:
         with self._lock:
@@ -29,6 +44,7 @@ class MemoryStorage(JobStorage):
             if job.queue not in self._queues:
                 self._queues[job.queue] = deque()
             self._queues[job.queue].append(job.id)
+            self._record_history(job.id, job.state_name, job.state_data)
             self._condition.notify()  # Notify any waiting worker
         return job.id
 
@@ -36,6 +52,7 @@ class MemoryStorage(JobStorage):
         with self._lock:
             self._jobs[job.id] = job
             self._scheduled[job.id] = enqueue_at
+            self._record_history(job.id, job.state_name, job.state_data)
         return job.id
 
     def add_recurring_job(
@@ -77,7 +94,9 @@ class MemoryStorage(JobStorage):
             )
             self.enqueue(job_instance)
 
-    def dequeue(self, queues: List[str], timeout_seconds: int) -> Optional[Job]:
+    def dequeue(
+        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+    ) -> Optional[Job]:
         with self._lock:
             start_time = time.monotonic()
             while True:  # This loop will now work as intended
@@ -87,7 +106,7 @@ class MemoryStorage(JobStorage):
                         job = self._jobs[job_id]
 
                         self.set_job_state(
-                            job.id, ProcessingState("server-mvp", "worker-1")
+                            job.id, ProcessingState(server_id, worker_id)
                         )
                         self._processing[job.id] = job
                         return job
@@ -117,6 +136,7 @@ class MemoryStorage(JobStorage):
 
             job.state_name = state.name
             job.state_data = state.serialize_data()
+            self._record_history(job.id, job.state_name, job.state_data)
 
             # If re-enqueued (for a retry), move it from processing back to a queue
             if isinstance(state, EnqueuedState):
@@ -139,3 +159,63 @@ class MemoryStorage(JobStorage):
             job = self._jobs.get(job_id)
             if job:
                 setattr(job, field_name, value)
+
+    def get_jobs_by_state(self, state_name: str, start: int, count: int) -> List[Job]:
+        with self._lock:
+            matching = [
+                job for job in self._jobs.values() if job.state_name == state_name
+            ]
+            return matching[start : start + count]
+
+    def get_job_ids_by_state(
+        self, state_name: str, start: int, count: int
+    ) -> List[str]:
+        with self._lock:
+            matching = [
+                job_id
+                for job_id, job in self._jobs.items()
+                if job.state_name == state_name
+            ]
+            return matching[start : start + count]
+
+    def get_state_job_count(self, state_name: str) -> int:
+        with self._lock:
+            return sum(1 for job in self._jobs.values() if job.state_name == state_name)
+
+    def get_all_servers(self) -> List[dict]:
+        return self.get_servers()
+
+    def server_heartbeat(self, server_id: str, worker_count: int, queues: List[str]):
+        with self._lock:
+            self._servers[server_id] = {
+                "id": server_id,
+                "worker_count": worker_count,
+                "queues": list(queues),
+                "last_heartbeat": datetime.now(UTC).isoformat(),
+            }
+
+    def remove_server(self, server_id: str):
+        with self._lock:
+            self._servers.pop(server_id, None)
+
+    def get_servers(self) -> List[dict]:
+        with self._lock:
+            return list(self._servers.values())
+
+    def get_recurring_jobs(self, start: int, count: int) -> List[dict]:
+        with self._lock:
+            items = list(self._recurring_jobs.items())[start : start + count]
+            jobs = []
+            for recurring_job_id, data in items:
+                entry = {"id": recurring_job_id}
+                entry.update(data)
+                jobs.append(entry)
+            return jobs
+
+    def get_job_history(self, job_id: str) -> List[dict]:
+        with self._lock:
+            return list(self._history.get(job_id, []))
+
+    def get_statistics(self) -> dict:
+        with self._lock:
+            return {state: self.get_state_job_count(state) for state in ALL_STATES}

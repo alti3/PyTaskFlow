@@ -13,16 +13,11 @@ from pytaskflow.common.states import (
     FailedState,
     ScheduledState,
 )
-from pytaskflow.common.exceptions import JobLoadError
 from pytaskflow.serialization.json_serializer import JsonSerializer
 from pytaskflow.storage.redis_storage import RedisStorage
 from pytaskflow.client import BackgroundJobClient
-from pytaskflow.execution.performer import perform_job
-from pytaskflow.server.processor import JobProcessor
 from pytaskflow.server.worker import Worker
-from pytaskflow.filters.builtin import RetryFilter
-from pytaskflow.server.context import ElectStateContext
-from pytaskflow.config import configure, get_storage
+from pytaskflow.config import configure
 
 
 # --- Helper functions for testing jobs ---
@@ -88,18 +83,30 @@ def test_redis_storage_enqueue_dequeue(redis_storage, redis_client):
     assert stored_job_data["target_function"] == "success_task"
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == [job_id]
 
-    dequeued_job = redis_storage.dequeue(["default"], timeout_seconds=1)
+    dequeued_job = redis_storage.dequeue(
+        ["default"], timeout_seconds=1, server_id="server-test", worker_id="worker-test"
+    )
     assert dequeued_job.id == job.id
     assert (
         dequeued_job.state_name == ProcessingState.NAME
     )  # State should change to Processing
 
     # Check if job is moved to processing list
-    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == [job_id]
+    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}:processing", 0, -1) == [
+        job_id
+    ]
     assert redis_client.lrange(f"pytaskflow:queue:{job.queue}", 0, -1) == []
 
     # Ensure it's removed from the queue
-    assert redis_storage.dequeue(["default"], timeout_seconds=0.1) is None
+    assert (
+        redis_storage.dequeue(
+            ["default"],
+            timeout_seconds=0.1,
+            server_id="server-test",
+            worker_id="worker-test",
+        )
+        is None
+    )
 
 
 def test_redis_storage_set_job_state(redis_storage, redis_client):
@@ -112,15 +119,15 @@ def test_redis_storage_set_job_state(redis_storage, redis_client):
     )
     redis_storage.enqueue(job)
 
-    succeeded_state = SucceededState(result=42)
+    completed_state = SucceededState(result=42)
     success = redis_storage.set_job_state(
-        job.id, succeeded_state, expected_old_state=EnqueuedState.NAME
+        job.id, completed_state, expected_old_state=EnqueuedState.NAME
     )
     assert success
     retrieved_job = redis_storage.get_job_data(job.id)
     assert retrieved_job.state_name == SucceededState.NAME
     assert (
-        retrieved_job.state_data["result"] == succeeded_state.serialize_data()["result"]
+        retrieved_job.state_data["result"] == completed_state.serialize_data()["result"]
     )
 
     # Test failed state change due to expected_old_state mismatch
@@ -128,7 +135,7 @@ def test_redis_storage_set_job_state(redis_storage, redis_client):
     success = redis_storage.set_job_state(
         job.id, failed_state, expected_old_state=EnqueuedState.NAME
     )
-    assert not success  # Should fail because current state is Succeeded
+    assert not success  # Should fail because current state is Completed
 
 
 def test_redis_storage_acknowledge(redis_storage, redis_client):
@@ -140,12 +147,14 @@ def test_redis_storage_acknowledge(redis_storage, redis_client):
         state_name=EnqueuedState.NAME,
     )
     redis_storage.enqueue(job)
-    dequeued_job = redis_storage.dequeue(["default"], timeout_seconds=1)
+    dequeued_job = redis_storage.dequeue(
+        ["default"], timeout_seconds=1, server_id="server-test", worker_id="worker-test"
+    )
     assert dequeued_job.id == job.id
 
     redis_storage.acknowledge(job.id)
     # Acknowledged jobs are removed from processing list
-    assert redis_client.lrange("pytaskflow:queue:processing", 0, -1) == []
+    assert redis_client.lrange(f"pytaskflow:queue:{job.queue}:processing", 0, -1) == []
     assert redis_storage.get_job_data(job.id) is not None  # Job data should still exist
 
 
@@ -374,7 +383,12 @@ def test_redis_storage_dequeue_prioritizes_queues(redis_storage, redis_client):
     redis_storage.enqueue(high_prio_job)
 
     # 3. Dequeue with 'critical' as the higher priority queue
-    dequeued_job = redis_storage.dequeue(queues=["critical", "low"], timeout_seconds=2)
+    dequeued_job = redis_storage.dequeue(
+        queues=["critical", "low"],
+        timeout_seconds=2,
+        server_id="server-test",
+        worker_id="worker-test",
+    )
 
     # 4. Assert that the high-priority job was dequeued, not the low-priority one
     assert dequeued_job is not None

@@ -1,0 +1,44 @@
+{% extends "_layout.html.j2" %}
+
+{% block content %}
+{% set state_accents = {
+    "enqueued": "bg-sky-500",
+    "processing": "bg-amber-500",
+    "succeeded": "bg-emerald-500",
+    "failed": "bg-rose-500",
+    "deleted": "bg-slate-400",
+    "awaiting": "bg-indigo-500",
+    "cancelled": "bg-orange-500",
+} %}
+
+<div class="mb-6 space-y-1">
+    <h1 class="text-2xl font-semibold tracking-tight">Dashboard</h1>
+    <p class="text-sm text-slate-500">A real-time snapshot of jobs across every lifecycle state.</p>
+</div>
+
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+    {% for state, count in stats.items() %}
+    {% set state_key = state | lower %}
+    {% set accent_class = state_accents.get(state_key, "bg-slate-400") %}
+    {% set pulse_class = "processing-pulse" if state_key == "processing" else "" %}
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+        <div class="flex items-center justify-between">
+            <p class="text-sm font-medium text-slate-500 capitalize">{{ state }}</p>
+            <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                <span class="h-2 w-2 rounded-full {{ accent_class }} {{ pulse_class }}"></span>
+                State
+            </span>
+        </div>
+        <div class="mt-4 flex items-end justify-between">
+            <p class="text-3xl font-semibold tracking-tight text-slate-900">{{ count }}</p>
+            <a href="{{ url_for('list_jobs_by_status', status=state) }}" class="inline-flex items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-800">
+                View Jobs
+            </a>
+        </div>
+        <div class="mt-5 h-1.5 w-full rounded-full border border-slate-200 bg-slate-100">
+            <div class="h-full w-24 rounded-full {{ accent_class }}"></div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 # pytaskflow/filters/base.py
-from abc import ABC, abstractmethod
+from abc import ABC
 
 
 class JobFilter(ABC):

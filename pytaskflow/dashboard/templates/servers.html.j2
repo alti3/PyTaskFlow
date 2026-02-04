@@ -1,0 +1,72 @@
+{% extends "_layout.html.j2" %}
+
+{% block content %}
+    <div class="mb-6 space-y-1">
+        <h1 class="text-2xl font-semibold tracking-tight">Servers</h1>
+        <p class="text-sm text-slate-500">Active workers, queues, and heartbeat freshness.</p>
+    </div>
+    <div class="mb-6 flex flex-wrap items-center gap-2 text-xs">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Server status</span>
+        <span class="h-3 w-px bg-slate-200"></span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-700">
+            <span class="h-2 w-2 rounded-full bg-emerald-500"></span>Healthy (≤ 30s)
+        </span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-700">
+            <span class="h-2 w-2 rounded-full bg-amber-500 processing-pulse"></span>Stale (31–60s)
+        </span>
+        <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-slate-600">
+            <span class="h-2 w-2 rounded-full bg-slate-400"></span>Offline (&gt; 60s)
+        </span>
+    </div>
+
+    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200 text-sm">
+                <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <tr>
+                        <th scope="col" class="px-4 py-3">ID</th>
+                        <th scope="col" class="px-4 py-3">Workers</th>
+                        <th scope="col" class="px-4 py-3">Queues</th>
+                        <th scope="col" class="px-4 py-3">Last Heartbeat</th>
+                        <th scope="col" class="px-4 py-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    {% if servers %}
+                        {% set status_styles = {
+                            "healthy": ("border-emerald-200", "bg-emerald-50 text-emerald-700", "bg-emerald-500", "Healthy"),
+                            "stale": ("border-amber-200", "bg-amber-50 text-amber-700", "bg-amber-500 processing-pulse", "Stale"),
+                            "offline": ("border-slate-200", "bg-slate-100 text-slate-600", "bg-slate-400", "Offline"),
+                            "unknown": ("border-slate-200", "bg-slate-50 text-slate-600", "bg-slate-400", "Unknown"),
+                        } %}
+                        {% for server in servers %}
+                            {% set status_key = server.status | default("unknown") %}
+                            {% set style = status_styles.get(status_key, status_styles["unknown"]) %}
+                            <tr class="transition hover:bg-slate-50">
+                                <td class="border-l-4 {{ style[0] }} px-4 py-3 text-xs font-medium text-slate-500">
+                                    <span class="inline-flex items-center gap-2">
+                                        <span class="h-2 w-2 rounded-full {{ style[2] }}"></span>
+                                        {{ server.id }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3 text-sm text-slate-600">{{ server.worker_count }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-600">{{ server.queues | join(", ") }}</td>
+                                <td class="px-4 py-3 text-sm text-slate-600">{{ server.last_heartbeat }}</td>
+                                <td class="px-4 py-3">
+                                    <span class="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold {{ style[1] }}">
+                                        <span class="h-2 w-2 rounded-full {{ style[2] }}"></span>
+                                        {{ style[3] }}
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">No active servers found.</td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endblock %}

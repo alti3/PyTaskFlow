@@ -1,0 +1,47 @@
+{% macro render_job_row(job) %}
+{% set state = job.state_name | lower %}
+{% if state == "succeeded" %}
+    {% set badge_classes = "border-emerald-200 bg-emerald-50 text-emerald-700" %}
+    {% set dot_classes = "bg-emerald-500" %}
+{% elif state == "failed" %}
+    {% set badge_classes = "border-rose-200 bg-rose-50 text-rose-700" %}
+    {% set dot_classes = "bg-rose-500" %}
+{% elif state == "processing" %}
+    {% set badge_classes = "border-amber-200 bg-amber-50 text-amber-700" %}
+    {% set dot_classes = "bg-amber-500 processing-pulse" %}
+{% elif state == "enqueued" %}
+    {% set badge_classes = "border-sky-200 bg-sky-50 text-sky-700" %}
+    {% set dot_classes = "bg-sky-500" %}
+{% elif state == "awaiting" %}
+    {% set badge_classes = "border-indigo-200 bg-indigo-50 text-indigo-700" %}
+    {% set dot_classes = "bg-indigo-500" %}
+{% elif state == "cancelled" %}
+    {% set badge_classes = "border-orange-200 bg-orange-50 text-orange-700" %}
+    {% set dot_classes = "bg-orange-500" %}
+{% else %}
+    {% set badge_classes = "border-slate-200 bg-slate-50 text-slate-600" %}
+    {% set dot_classes = "bg-slate-400" %}
+{% endif %}
+<tr class="transition hover:bg-slate-50">
+    <td class="px-4 py-3 text-xs font-medium text-slate-500">
+        <a class="font-mono text-[11px] text-slate-600 hover:text-slate-900" href="{{ url_for('job_details', job_id=job.id) }}">{{ job.id }}</a>
+    </td>
+    <td class="px-4 py-3 text-sm text-slate-700">
+        <code class="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">{{ job.target_module }}.{{ job.target_function }}</code>
+    </td>
+    <td class="px-4 py-3 text-sm text-slate-600">{{ job.queue }}</td>
+    <td class="px-4 py-3">
+        <span class="inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold {{ badge_classes }}">
+            <span class="h-2 w-2 rounded-full {{ dot_classes }}"></span>
+            {{ job.state_name }}
+        </span>
+    </td>
+    <td class="px-4 py-3 text-sm text-slate-600">{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S %Z') if job.created_at else "" }}</td>
+    <td class="px-4 py-3 text-sm text-slate-600">{{ job.retry_count }}</td>
+    <td class="px-4 py-3">
+        <a href="{{ url_for('job_details', job_id=job.id) }}" class="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100">
+            Details
+        </a>
+    </td>
+</tr>
+{% endmacro %}

@@ -1,33 +1,33 @@
 # pytaskflow/client.py
-from typing import Callable, Any, Optional
+from typing import Callable, Any, Optional, List, Dict
 from datetime import datetime, UTC
 
-from pytaskflow.common.job import Job
-from pytaskflow.common.states import EnqueuedState, ScheduledState
-from pytaskflow.storage.base import JobStorage
-from pytaskflow.serialization.base import BaseSerializer
-from pytaskflow.serialization.json_serializer import JsonSerializer
+from .common.job import Job
+from .common.states import EnqueuedState, ScheduledState, DeletedState
+from .storage.base import JobStorage
+from .storage.redis_storage import RedisStorage
+from .serialization.base import BaseSerializer
+from .serialization.json_serializer import JsonSerializer
 
 
 class BackgroundJobClient:
+    """
+    A client for interacting with PyTaskFlow, enabling job enqueuing, scheduling,
+    and querying for the dashboard.
+    """
+
     def __init__(
         self, storage: JobStorage, serializer: Optional[BaseSerializer] = None
     ):
+        if storage is None:
+            raise ValueError("storage is required for BackgroundJobClient")
         self.storage = storage
         self.serializer = serializer or JsonSerializer()
 
     def enqueue(self, target_func: Callable, *args: Any, **kwargs: Any) -> str:
         """Creates a fire-and-forget job."""
-
-        # 1. Get function location
-        module_name = target_func.__module__
-        func_name = target_func.__name__
-
-        # 2. Serialize arguments
-        # For MVP, we'll let the user ensure args are JSON-serializable
+        module_name, func_name = target_func.__module__, target_func.__name__
         serialized_args = self.serializer.serialize_args(target_func, *args, **kwargs)
-
-        # 3. Create Job object
         job = Job(
             target_module=module_name,
             target_function=func_name,
@@ -36,11 +36,9 @@ class BackgroundJobClient:
             state_name=EnqueuedState.NAME,
             state_data=EnqueuedState().serialize_data(),
         )
+        return self.storage.enqueue(job)
 
-        # 4. Enqueue it
-        job_id = self.storage.enqueue(job)
-        return job_id
-
+    # ... (schedule, add_or_update_recurring, etc. remain the same)
     def schedule(
         self, target_func: Callable, enqueue_at: datetime, *args: Any, **kwargs: Any
     ) -> str:
@@ -89,3 +87,42 @@ class BackgroundJobClient:
 
     def trigger(self, recurring_job_id: str):
         self.storage.trigger_recurring_job(recurring_job_id)
+
+    def delete(self, job_id: str) -> bool:
+        return self.storage.set_job_state(
+            job_id, DeletedState(reason="Manually deleted")
+        )
+
+    # --- Dashboard Methods ---
+
+    def get_jobs_by_state(
+        self, state_name: str, page: int = 1, page_size: int = 20
+    ) -> List[Job]:
+        start = (page - 1) * page_size
+        return self.storage.get_jobs_by_state(state_name, start, page_size)
+
+    def get_job_details(self, job_id: str) -> Optional[Job]:
+        return self.storage.get_job_data(job_id)
+
+    def get_state_counts(self) -> Dict[str, int]:
+        from .common.states import ALL_STATES
+
+        return {state: self.storage.get_state_job_count(state) for state in ALL_STATES}
+
+    def get_servers(self) -> List[Dict]:
+        if hasattr(self.storage, "get_servers"):
+            return self.storage.get_servers()
+        return self.storage.get_all_servers()
+
+    def get_recurring_jobs(self, page: int = 1, page_size: int = 20) -> List[Dict]:
+        start = (page - 1) * page_size
+        return self.storage.get_recurring_jobs(start, page_size)
+
+
+class Client(BackgroundJobClient):
+    def __init__(
+        self,
+        storage: Optional[JobStorage] = None,
+        serializer: Optional[BaseSerializer] = None,
+    ):
+        super().__init__(storage or RedisStorage(), serializer)
