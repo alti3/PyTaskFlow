@@ -3,7 +3,7 @@ name = "pytaskflow"
 version = "0.1.0"
 description = "Background jobs and workers for Python"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
     "redis>=5.0.0",
     "cronsim>=2.6",
