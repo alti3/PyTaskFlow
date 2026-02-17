@@ -1190,6 +1190,7 @@ docs = [
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mkdocstrings", extra = ["python"] },
+    { name = "pymdown-extensions" },
 ]
 fastapi = [
     { name = "fastapi" },
@@ -1208,9 +1209,10 @@ requires-dist = [
     { name = "cronsim", specifier = ">=2.6" },
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.110.0" },
     { name = "litestar", extras = ["jinja", "standard"], marker = "extra == 'dashboard'", specifier = ">=2.16.0" },
-    { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.0" },
-    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5.0" },
-    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=0.25.0" },
+    { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
+    { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.7.1" },
+    { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
+    { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.20.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.1" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.1" },
