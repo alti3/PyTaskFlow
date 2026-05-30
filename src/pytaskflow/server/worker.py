@@ -6,13 +6,13 @@ import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, List, Optional, cast
+from typing import Callable, List, Optional, Sequence, cast
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from cronsim import CronSim
 
 from pytaskflow.storage.base import JobStorage
-from pytaskflow.storage.redis_storage import RedisStorage
+from pytaskflow.filters.base import JobFilter
 from pytaskflow.serialization.base import BaseSerializer
 from pytaskflow.server.processor import JobProcessor
 from pytaskflow.serialization.json_serializer import JsonSerializer
@@ -39,6 +39,7 @@ class Worker:
         worker_count: int = 4,
         scheduler_poll_interval_seconds: float = 15,
         concurrency_mode: ConcurrencyMode = ConcurrencyMode.THREADED,
+        filters: Sequence[JobFilter] | None = None,
     ):
         self.storage = storage
         self.serializer = serializer or JsonSerializer()
@@ -51,6 +52,7 @@ class Worker:
         self._last_scheduler_run = 0
         self._last_heartbeat = 0
         self.concurrency_mode = concurrency_mode
+        self.filters = list(filters) if filters is not None else None
 
     def _run_schedulers(self):
         """Runs periodic tasks like enqueuing scheduled jobs."""
@@ -70,14 +72,16 @@ class Worker:
         if callable(enqueue_due):
             cast(Callable[[], object], enqueue_due)()
             return
-        if not isinstance(storage, RedisStorage):  # Phase 2 only supports Redis
+        move_to_enqueued = getattr(storage, "move_to_enqueued_script", None)
+        redis_client = getattr(storage, "redis_client", None)
+        if move_to_enqueued is None or redis_client is None:
             return
 
         now_timestamp = datetime.now(timezone.utc).timestamp()
 
         while True:
             # Using the Lua script to atomically move jobs
-            job_ids_result = storage.move_to_enqueued_script(
+            job_ids_result = move_to_enqueued(
                 keys=["pytaskflow:scheduled"],
                 args=[
                     now_timestamp,
@@ -102,34 +106,31 @@ class Worker:
         if callable(enqueue_due):
             cast(Callable[[], object], enqueue_due)()
             return
-        if not isinstance(self.storage, RedisStorage):
+        redis_client = getattr(self.storage, "redis_client", None)
+        if redis_client is None:
             return
 
         lock_key = "pytaskflow:lock:recurring-scheduler"
-        if not self.storage.redis_client.set(lock_key, self.server_id, ex=60, nx=True):
+        if not redis_client.set(lock_key, self.server_id, ex=60, nx=True):
             return  # Another worker is handling it
 
         try:
             now = datetime.now(timezone.utc)
             recurring_job_ids = cast(
                 set[str],
-                self.storage.redis_client.smembers("pytaskflow:recurring-jobs:ids"),
+                redis_client.smembers("pytaskflow:recurring-jobs:ids"),
             )
 
             for job_id in recurring_job_ids:
                 # Use a distributed lock per job to handle updates atomically
                 job_lock_key = f"pytaskflow:lock:recurring-job:{job_id}"
-                if not self.storage.redis_client.set(
-                    job_lock_key, self.server_id, ex=10, nx=True
-                ):
+                if not redis_client.set(job_lock_key, self.server_id, ex=10, nx=True):
                     continue
 
                 try:
                     data_str = cast(
                         str | None,
-                        self.storage.redis_client.hget(
-                            "pytaskflow:recurring-jobs", job_id
-                        ),
+                        redis_client.hget("pytaskflow:recurring-jobs", job_id),
                     )
                     if not data_str:
                         continue
@@ -167,14 +168,14 @@ class Worker:
 
                         # Update last execution time
                         data["last_execution"] = now.isoformat()
-                        self.storage.redis_client.hset(
+                        redis_client.hset(
                             "pytaskflow:recurring-jobs", job_id, json.dumps(data)
                         )
                 finally:
-                    self.storage.redis_client.delete(job_lock_key)
+                    redis_client.delete(job_lock_key)
 
         finally:
-            self.storage.redis_client.delete(lock_key)
+            redis_client.delete(lock_key)
 
     def _send_heartbeat(self):
         now = time.monotonic()
@@ -218,7 +219,10 @@ class Worker:
                             f"[{self.worker_id}] Picked up job {dequeued_job.id} (state: {dequeued_job.state_name}, retry_count: {dequeued_job.retry_count})"
                         )
                         processor = JobProcessor(
-                            dequeued_job, self.storage, self.serializer
+                            dequeued_job,
+                            self.storage,
+                            self.serializer,
+                            filters=self.filters,
                         )
                         in_flight_futures.add(executor.submit(processor.process))
 
@@ -291,7 +295,10 @@ class Worker:
                         f"[{self.worker_id}] Picked up job {dequeued_job.id} (state: {dequeued_job.state_name}, retry_count: {dequeued_job.retry_count})"
                     )
                     processor = JobProcessor(
-                        dequeued_job, self.storage, self.serializer
+                        dequeued_job,
+                        self.storage,
+                        self.serializer,
+                        filters=self.filters,
                     )
                     task = asyncio.create_task(processor.process_async())
                     in_flight_tasks.add(task)

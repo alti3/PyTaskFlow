@@ -2,9 +2,14 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol
 
 from .common.job import Job
-from .common.states import DeletedState, EnqueuedState, FailedState, ScheduledState
+from .common.states import (
+    AwaitingState,
+    DeletedState,
+    EnqueuedState,
+    FailedState,
+    ScheduledState,
+)
 from .storage.base import JobStorage
-from .storage.redis_storage import RedisStorage
 from .serialization.base import BaseSerializer
 from .serialization.json_serializer import JsonSerializer
 
@@ -43,6 +48,23 @@ class BackgroundJobClient:
             state_data=EnqueuedState().serialize_data(),
         )
         return self.storage.enqueue(job)
+
+    def continue_with(
+        self, parent_job_id: str, target_func: JobCallable, *args: Any, **kwargs: Any
+    ) -> str:
+        """Creates a job that is enqueued after the parent job succeeds."""
+        module_name, func_name = target_func.__module__, target_func.__name__
+        serialized_args = self.serializer.serialize_args(target_func, *args, **kwargs)
+        awaiting_state = AwaitingState(parent_id=parent_job_id)
+        job = Job(
+            target_module=module_name,
+            target_function=func_name,
+            args=serialized_args[0],
+            kwargs=serialized_args[1],
+            state_name=awaiting_state.name,
+            state_data=awaiting_state.serialize_data(),
+        )
+        return self.storage.add_continuation(parent_job_id, job)
 
     # ... (schedule, add_or_update_recurring, etc. remain the same)
     def schedule(
@@ -151,4 +173,13 @@ class Client(BackgroundJobClient):
         storage: Optional[JobStorage] = None,
         serializer: Optional[BaseSerializer] = None,
     ):
-        super().__init__(storage or RedisStorage(), serializer)
+        if storage is None:
+            try:
+                from .storage.redis_storage import RedisStorage
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Client() without explicit storage requires the redis extra. "
+                    "Install pytaskflow[redis] or pass a JobStorage instance."
+                ) from exc
+            storage = RedisStorage()
+        super().__init__(storage, serializer)

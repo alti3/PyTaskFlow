@@ -1,21 +1,36 @@
 # pytaskflow/storage/memory_storage.py
 import logging
 import time
+import uuid
 from collections import deque
-from threading import RLock, Condition
+from dataclasses import dataclass
+from threading import Condition, RLock
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.common.job import Job
 from pytaskflow.common.states import (
+    AwaitingState,
     BaseState,
     ProcessingState,
     EnqueuedState,
+    ScheduledState,
     ALL_STATES,
+    SucceededState,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class _MemoryLock:
+    storage: "MemoryStorage"
+    resource: str
+    token: str
+
+    def release(self) -> None:
+        self.storage._release_distributed_lock(self.resource, self.token)
 
 
 class MemoryStorage(JobStorage):
@@ -25,6 +40,8 @@ class MemoryStorage(JobStorage):
         self._processing: Dict[str, Job] = {}  # Jobs currently being processed
         self._scheduled: Dict[str, datetime] = {}  # job_id -> enqueue_at
         self._recurring_jobs: Dict[str, dict] = {}  # recurring_job_id -> job data
+        self._continuations: Dict[str, List[str]] = {}
+        self._distributed_locks: Dict[str, tuple[str, float]] = {}
         self._history: Dict[str, List[dict]] = {}
         self._servers: Dict[str, dict] = {}
         self._lock = RLock()
@@ -94,6 +111,53 @@ class MemoryStorage(JobStorage):
             )
             self.enqueue(job_instance)
 
+    def add_continuation(self, parent_job_id: str, continuation_job: Job) -> str:
+        with self._lock:
+            self._jobs[continuation_job.id] = continuation_job
+            self._continuations.setdefault(parent_job_id, []).append(
+                continuation_job.id
+            )
+            self._record_history(
+                continuation_job.id,
+                continuation_job.state_name,
+                continuation_job.state_data,
+            )
+
+            parent = self._jobs.get(parent_job_id)
+            if parent and parent.state_name == SucceededState.NAME:
+                self.set_job_state(
+                    continuation_job.id,
+                    EnqueuedState(
+                        queue=continuation_job.queue,
+                        reason=f"Continuation of job {parent_job_id}",
+                    ),
+                    expected_old_state=AwaitingState.NAME,
+                )
+        return continuation_job.id
+
+    def get_continuations(self, parent_job_id: str) -> List[str]:
+        with self._lock:
+            return list(self._continuations.get(parent_job_id, []))
+
+    def acquire_distributed_lock(
+        self, resource: str, timeout_seconds: float
+    ) -> Optional[_MemoryLock]:
+        with self._lock:
+            now = time.monotonic()
+            current = self._distributed_locks.get(resource)
+            if current and current[1] > now:
+                return None
+
+            token = uuid.uuid4().hex
+            self._distributed_locks[resource] = (token, now + timeout_seconds)
+            return _MemoryLock(self, resource, token)
+
+    def _release_distributed_lock(self, resource: str, token: str) -> None:
+        with self._lock:
+            current = self._distributed_locks.get(resource)
+            if current and current[0] == token:
+                self._distributed_locks.pop(resource, None)
+
     def dequeue(
         self, queues: List[str], timeout_seconds: float, server_id: str, worker_id: str
     ) -> Optional[Job]:
@@ -134,6 +198,10 @@ class MemoryStorage(JobStorage):
             if expected_old_state and job.state_name != expected_old_state:
                 return False
 
+            old_state = job.state_name
+            for handler in self.get_state_handlers(old_state):
+                handler.on_unapply(job, old_state, state)
+
             job.state_name = state.name
             job.state_data = state.serialize_data()
             self._record_history(job.id, job.state_name, job.state_data)
@@ -142,11 +210,18 @@ class MemoryStorage(JobStorage):
             if isinstance(state, EnqueuedState):
                 if job_id in self._processing:
                     del self._processing[job_id]
+                self._scheduled.pop(job_id, None)
 
                 if job.queue not in self._queues:
                     self._queues[job.queue] = deque()
                 self._queues[job.queue].append(job.id)
                 self._condition.notify()
+            elif isinstance(state, ScheduledState):
+                self._processing.pop(job_id, None)
+                self._scheduled[job_id] = state.enqueue_at
+
+            for handler in self.get_state_handlers(state.name):
+                handler.on_apply(job, old_state, state)
 
             return True
 
@@ -219,3 +294,27 @@ class MemoryStorage(JobStorage):
     def get_statistics(self) -> dict:
         with self._lock:
             return {state: self.get_state_job_count(state) for state in ALL_STATES}
+
+    def enqueue_due_scheduled_jobs(self, batch_size: int = 100) -> List[str]:
+        now = datetime.now(timezone.utc)
+        moved: List[str] = []
+        with self._lock:
+            due_ids = [
+                job_id
+                for job_id, enqueue_at in sorted(
+                    self._scheduled.items(), key=lambda item: item[1]
+                )
+                if enqueue_at <= now
+            ][:batch_size]
+            for job_id in due_ids:
+                job = self._jobs.get(job_id)
+                if job is None:
+                    self._scheduled.pop(job_id, None)
+                    continue
+                if self.set_job_state(
+                    job_id,
+                    EnqueuedState(queue=job.queue),
+                    expected_old_state=ScheduledState.NAME,
+                ):
+                    moved.append(job_id)
+        return moved

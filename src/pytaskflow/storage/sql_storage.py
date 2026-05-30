@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -21,6 +23,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 from pytaskflow.common.job import Job
@@ -32,6 +35,7 @@ from pytaskflow.common.states import (
     EnqueuedState,
     ProcessingState,
     ScheduledState,
+    SucceededState,
 )
 from pytaskflow.storage.base import JobStorage
 
@@ -103,6 +107,40 @@ class ServerModel(Base):
     worker_count: Mapped[int] = mapped_column(Integer)
     queues: Mapped[str] = mapped_column(Text)
     last_heartbeat: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ContinuationModel(Base):
+    __tablename__ = "pytaskflow_continuations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    parent_job_id: Mapped[str] = mapped_column(String(64), index=True)
+    continuation_job_id: Mapped[str] = mapped_column(
+        String(64), unique=True, index=True
+    )
+
+
+class DistributedLockModel(Base):
+    __tablename__ = "pytaskflow_distributed_locks"
+
+    resource: Mapped[str] = mapped_column(String(255), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+@dataclass
+class _SqlLock:
+    storage: "SqlStorage"
+    resource: str
+    owner: str
+
+    def release(self) -> None:
+        with self.storage._session_factory.begin() as session:
+            session.execute(
+                delete(DistributedLockModel).where(
+                    DistributedLockModel.resource == self.resource,
+                    DistributedLockModel.owner == self.owner,
+                )
+            )
 
 
 class SqlStorage(JobStorage):
@@ -341,6 +379,86 @@ class SqlStorage(JobStorage):
             )
             self._record_history(session, job.id, EnqueuedState(queue=job.queue))
 
+    def add_continuation(self, parent_job_id: str, continuation_job: Job) -> str:
+        with self._session_factory.begin() as session:
+            session.add(
+                JobModel(
+                    id=continuation_job.id,
+                    target_module=continuation_job.target_module,
+                    target_function=continuation_job.target_function,
+                    args=continuation_job.args,
+                    kwargs=continuation_job.kwargs,
+                    state_name=continuation_job.state_name,
+                    state_data=self._serialize_state_data(continuation_job.state_data),
+                    queue=continuation_job.queue,
+                    retry_count=continuation_job.retry_count,
+                    created_at=continuation_job.created_at,
+                )
+            )
+            session.add(
+                ContinuationModel(
+                    parent_job_id=parent_job_id,
+                    continuation_job_id=continuation_job.id,
+                )
+            )
+            self._record_history(
+                session,
+                continuation_job.id,
+                AwaitingState(parent_id=parent_job_id),
+            )
+            parent = session.get(JobModel, parent_job_id)
+            if parent and parent.state_name == SucceededState.NAME:
+                enqueued_state = EnqueuedState(
+                    queue=continuation_job.queue,
+                    reason=f"Continuation of job {parent_job_id}",
+                )
+                model = session.get(JobModel, continuation_job.id)
+                if model:
+                    model.state_name = enqueued_state.name
+                    model.state_data = self._serialize_state_data(
+                        enqueued_state.serialize_data()
+                    )
+                    self._upsert_queue_entry(
+                        session,
+                        job_id=model.id,
+                        queue=model.queue,
+                        status="enqueued",
+                        enqueued_at=datetime.now(timezone.utc),
+                    )
+                    self._record_history(session, model.id, enqueued_state)
+        return continuation_job.id
+
+    def get_continuations(self, parent_job_id: str) -> List[str]:
+        with self._session_factory() as session:
+            rows = session.execute(
+                select(ContinuationModel.continuation_job_id)
+                .where(ContinuationModel.parent_job_id == parent_job_id)
+                .order_by(ContinuationModel.id)
+            ).scalars()
+            return list(rows)
+
+    def acquire_distributed_lock(
+        self, resource: str, timeout_seconds: float
+    ) -> Optional[_SqlLock]:
+        owner = uuid.uuid4().hex
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(seconds=timeout_seconds)
+        try:
+            with self._session_factory.begin() as session:
+                session.execute(
+                    delete(DistributedLockModel).where(
+                        DistributedLockModel.expires_at <= now
+                    )
+                )
+                session.add(
+                    DistributedLockModel(
+                        resource=resource, owner=owner, expires_at=expires_at
+                    )
+                )
+            return _SqlLock(self, resource, owner)
+        except IntegrityError:
+            return None
+
     def dequeue(
         self, queues: List[str], timeout_seconds: float, server_id: str, worker_id: str
     ) -> Optional[Job]:
@@ -419,6 +537,11 @@ class SqlStorage(JobStorage):
             if expected_old_state and job.state_name != expected_old_state:
                 return False
 
+            old_state = job.state_name
+            job_snapshot = self._job_from_model(job)
+            for handler in self.get_state_handlers(old_state):
+                handler.on_unapply(job_snapshot, old_state, state)
+
             job.state_name = state.name
             job.state_data = self._serialize_state_data(state.serialize_data())
 
@@ -439,8 +562,18 @@ class SqlStorage(JobStorage):
                 session.execute(
                     delete(ScheduledJobModel).where(ScheduledJobModel.job_id == job_id)
                 )
+            elif isinstance(state, ScheduledState):
+                session.execute(
+                    delete(QueueEntryModel).where(QueueEntryModel.job_id == job_id)
+                )
+                session.merge(
+                    ScheduledJobModel(job_id=job.id, enqueue_at=state.enqueue_at)
+                )
 
             self._record_history(session, job.id, state)
+            updated_snapshot = self._job_from_model(job)
+            for handler in self.get_state_handlers(state.name):
+                handler.on_apply(updated_snapshot, old_state, state)
             return True
 
     def get_job_data(self, job_id: str) -> Optional[Job]:

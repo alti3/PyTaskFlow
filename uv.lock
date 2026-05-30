@@ -1166,14 +1166,10 @@ wheels = [
 
 [[package]]
 name = "pytaskflow"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "cronsim" },
-    { name = "litestar", extra = ["jinja"] },
-    { name = "redis" },
-    { name = "ruff" },
-    { name = "ty" },
 ]
 
 [package.optional-dependencies]
@@ -1190,7 +1186,16 @@ docs = [
 fastapi = [
     { name = "fastapi" },
 ]
+litestar = [
+    { name = "litestar", extra = ["jinja"] },
+]
+redis = [
+    { name = "redis" },
+]
 sql = [
+    { name = "sqlalchemy" },
+]
+sqlalchemy = [
     { name = "sqlalchemy" },
 ]
 
@@ -1199,6 +1204,7 @@ dev = [
     { name = "fastapi" },
     { name = "litestar", extra = ["jinja", "standard"] },
     { name = "pytest" },
+    { name = "redis" },
     { name = "ruff" },
     { name = "sqlalchemy" },
     { name = "ty" },
@@ -1209,28 +1215,28 @@ dev = [
 requires-dist = [
     { name = "cronsim", specifier = ">=2.6" },
     { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.110.0" },
-    { name = "litestar", extras = ["jinja"], specifier = ">=2.23.0" },
+    { name = "litestar", extras = ["jinja"], marker = "extra == 'litestar'", specifier = ">=2.16.0" },
     { name = "litestar", extras = ["jinja", "standard"], marker = "extra == 'dashboard'", specifier = ">=2.16.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.7.1" },
     { name = "mkdocstrings", extras = ["python"], marker = "extra == 'docs'", specifier = ">=1.0.3" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.20.1" },
-    { name = "redis", specifier = ">=5.0.0" },
-    { name = "ruff", specifier = ">=0.15.15" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=5.0.0" },
     { name = "sqlalchemy", marker = "extra == 'sql'", specifier = ">=2.0.0" },
-    { name = "ty", specifier = ">=0.0.40" },
+    { name = "sqlalchemy", marker = "extra == 'sqlalchemy'", specifier = ">=2.0.0" },
     { name = "uvicorn", marker = "extra == 'dashboard'", specifier = ">=0.35.0" },
 ]
-provides-extras = ["dashboard", "fastapi", "docs", "sql"]
+provides-extras = ["dashboard", "fastapi", "litestar", "redis", "docs", "sql", "sqlalchemy"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "litestar", extras = ["jinja", "standard"], specifier = ">=2.16.0" },
     { name = "pytest", specifier = ">=8.4.1" },
-    { name = "ruff", specifier = ">=0.12.1" },
+    { name = "redis", specifier = ">=5.0.0" },
+    { name = "ruff", specifier = ">=0.15.15" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
-    { name = "ty", specifier = ">=0.0.1a12" },
+    { name = "ty", specifier = ">=0.0.40" },
     { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 

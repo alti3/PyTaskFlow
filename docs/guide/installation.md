@@ -23,6 +23,18 @@ FastAPI integration:
 uv add "pytaskflow[fastapi]"
 ```
 
+Litestar integration:
+
+```bash
+uv add "pytaskflow[litestar]"
+```
+
+Redis storage backend:
+
+```bash
+uv add "pytaskflow[redis]"
+```
+
 Documentation tooling:
 
 ```bash

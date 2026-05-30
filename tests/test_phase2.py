@@ -37,10 +37,17 @@ def my_side_effect_function(file_path, content):
 # --- Fixtures ---
 @pytest.fixture
 def redis_client():
-    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    r = redis.Redis(
+        host="localhost",
+        port=6379,
+        db=0,
+        decode_responses=True,
+        socket_connect_timeout=0.05,
+        socket_timeout=0.05,
+    )
     try:
         r.ping()
-    except redis.exceptions.ConnectionError:
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
         pytest.skip("Redis server not running on localhost:6379")
     r.flushdb()  # Clear database before each test
     return r

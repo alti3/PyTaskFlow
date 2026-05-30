@@ -336,7 +336,7 @@ sequenceDiagram
 | 2     | Storage & Basic Features        | ✅ Complete | • `RedisStorage` implementation<br>• Delayed jobs (`ScheduledState` and scheduler)<br>• Recurring jobs (CRON, `RecurringJobManager`, scheduler)<br>• Basic logging |
 | 3     | Worker Enhancements & Dashboard | ✅ Complete | • Threaded worker<br>• Basic Dashboard (read-only job views)<br>• More states (Deleted, Awaiting) |
 | 4     | Advanced Features & Integrations | ✅ Complete | • Asyncio worker support<br>• SQLAlchemy storage (optional)<br>• Interactive Dashboard (retry/delete jobs)<br>• FastAPI/Litestar integration plugins<br>• Documentation and examples |
-| 5     | Polish & Community              | ⏳ To Do    | • More built-in filters<br>• Performance optimizations<br>• Extensive testing<br>• Contrib modules |
+| 5     | Polish & Community              | ✅ Complete | • Job continuations<br>• Built-in `DisableConcurrentExecution` filter<br>• Storage-backed distributed locks<br>• State-handler extension hooks<br>• Release packaging cleanup |
 
 This plan provides a solid foundation.
 Remember to start small, test thoroughly, and iterate.

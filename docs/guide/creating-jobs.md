@@ -27,3 +27,15 @@ client.add_or_update_recurring(
     cron_expression="0 0 * * *",
 )
 ```
+
+## Continuations
+
+Use `continue_with()` to enqueue follow-up work only after a parent job succeeds:
+
+```python
+parent_id = client.enqueue(import_customers, "customers.csv")
+client.continue_with(parent_id, send_import_summary, "ops@example.com")
+```
+
+Continuation jobs start in the `Awaiting` state. When the parent reaches
+`Succeeded`, PyTaskFlow moves each awaiting continuation to `Enqueued`.

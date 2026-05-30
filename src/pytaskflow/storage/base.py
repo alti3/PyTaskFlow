@@ -1,10 +1,22 @@
 # pytaskflow/storage/base.py
 from abc import ABC, abstractmethod
-from typing import Optional, List, Any
 from datetime import datetime
+from typing import Any, List, Optional, Protocol
 
 from pytaskflow.common.job import Job
 from pytaskflow.common.states import BaseState
+
+
+class DistributedLock(Protocol):
+    def release(self) -> None: ...
+
+
+class StateHandler:
+    def on_unapply(self, job: Job, old_state: str, new_state: BaseState) -> None:
+        pass
+
+    def on_apply(self, job: Job, old_state: str, new_state: BaseState) -> None:
+        pass
 
 
 class JobStorage(ABC):
@@ -24,6 +36,17 @@ class JobStorage(ABC):
 
     @abstractmethod
     def trigger_recurring_job(self, recurring_job_id: str): ...
+
+    @abstractmethod
+    def add_continuation(self, parent_job_id: str, continuation_job: Job) -> str: ...
+
+    @abstractmethod
+    def get_continuations(self, parent_job_id: str) -> List[str]: ...
+
+    @abstractmethod
+    def acquire_distributed_lock(
+        self, resource: str, timeout_seconds: float
+    ) -> Optional[DistributedLock]: ...
 
     @abstractmethod
     def dequeue(
@@ -79,3 +102,6 @@ class JobStorage(ABC):
 
     @abstractmethod
     def get_statistics(self) -> dict: ...
+
+    def get_state_handlers(self, state_name: str) -> List[StateHandler]:
+        return []

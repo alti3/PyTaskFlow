@@ -1,8 +1,17 @@
 # pytaskflow/filters/builtin.py
-from pytaskflow.filters.base import JobFilter
-from pytaskflow.common.states import EnqueuedState, FailedState
 import logging
-from pytaskflow.server.context import ElectStateContext
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
+
+from pytaskflow.common.states import EnqueuedState, FailedState, ScheduledState
+from pytaskflow.filters.base import JobFilter
+
+if TYPE_CHECKING:
+    from pytaskflow.server.context import (
+        ElectStateContext,
+        PerformedContext,
+        PerformingContext,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +20,7 @@ class RetryFilter(JobFilter):
     def __init__(self, attempts: int = 3):
         self.attempts = attempts
 
-    def on_state_election(self, elect_state_context: ElectStateContext):
+    def on_state_election(self, elect_state_context: "ElectStateContext"):
         job = elect_state_context.job
         candidate_state = elect_state_context.candidate_state
 
@@ -39,3 +48,43 @@ class RetryFilter(JobFilter):
                 logger.debug(
                     f"RetryFilter: Job {job.id} retries exhausted. Moving to Failed state."
                 )
+
+
+class DisableConcurrentExecution(JobFilter):
+    def __init__(
+        self,
+        resource_key: str,
+        timeout_seconds: float = 300,
+        retry_delay_seconds: float = 60,
+    ):
+        self.resource_key = resource_key
+        self.timeout_seconds = timeout_seconds
+        self.retry_delay_seconds = retry_delay_seconds
+
+    def on_performing(self, performing_context: "PerformingContext") -> None:
+        formatted_key = self.resource_key.format(
+            *performing_context.args, **performing_context.kwargs
+        )
+        lock = performing_context.storage.acquire_distributed_lock(
+            f"pytaskflow:lock:{formatted_key}", self.timeout_seconds
+        )
+        if lock is None:
+            performing_context.canceled = True
+            enqueue_at = datetime.now(timezone.utc) + timedelta(
+                seconds=self.retry_delay_seconds
+            )
+            performing_context.next_state = ScheduledState(
+                enqueue_at=enqueue_at,
+                scheduled_at=datetime.now(timezone.utc),
+                reason=f"Could not acquire lock on resource: {formatted_key}",
+            )
+            return
+
+        performing_context.items["distributed_lock"] = lock
+
+    def on_performed(self, performed_context: "PerformedContext") -> None:
+        lock = performed_context.items.pop("distributed_lock", None)
+        if lock is not None:
+            release = getattr(lock, "release", None)
+            if callable(release):
+                release()

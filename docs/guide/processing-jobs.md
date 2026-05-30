@@ -26,3 +26,22 @@ worker.run()
 ```
 
 When using asyncio mode, synchronous jobs are automatically offloaded to a thread.
+
+## Preventing Concurrent Execution
+
+`DisableConcurrentExecution` can be passed to a worker to ensure jobs sharing a
+resource key do not run at the same time:
+
+```python
+from pytaskflow.filters.builtin import DisableConcurrentExecution
+from pytaskflow.server.worker import Worker
+
+worker = Worker(
+    storage,
+    queues=["default"],
+    filters=[DisableConcurrentExecution("customer-import:{customer_id}")],
+)
+```
+
+If the lock is already held, the job is moved back to `Scheduled` and retried
+after the filter's retry delay.
