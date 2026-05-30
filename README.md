@@ -24,61 +24,18 @@ The Python package is still WIP (work in progress) and requires careful thought 
 
 ```
 pytaskflow/
-├── pytaskflow/                  # Core library code
-│   ├── __init__.py            # Public API (enqueue, schedule, etc.)
-│   ├── client.py              # BackgroundJobClient
-│   ├── common/                # Shared utilities, Job class, enums
-│   │   ├── __init__.py
-│   │   ├── job.py             # Job data model
-│   │   ├── states.py          # State definitions (enum or classes)
-│   │   ├── exceptions.py
-│   │   └── utils.py
-│   ├── config.py              # Global configuration
-│   ├── decorators.py          # @background_job decorator
-│   ├── execution/             # Job execution logic
-│   │   ├── __init__.py
-│   │   ├── performer.py       # Executes the actual job function
-│   │   └── context.py         # PerformContext
-│   ├── filters/               # Job filters
-│   │   ├── __init__.py
-│   │   ├── base.py            # IJobFilter equivalent
-│   │   └── builtin.py         # RetryAttribute, etc.
-│   ├── scheduling/            # For delayed and recurring jobs
-│   │   ├── __init__.py
-│   │   ├── cron.py            # CRON parsing/utilities
-│   │   ├── delayed.py
-│   │   └── recurring.py
-│   ├── serialization/         # Job (de)serialization
-│   │   ├── __init__.py
-│   │   ├── base.py
-│   │   └── json_serializer.py # Default serializer
-│   ├── server/                # Worker logic
-│   │   ├── __init__.py
-│   │   ├── worker.py          # Worker class
-│   │   └── processor.py       # Processes a single job
-│   ├── storage/               # Storage backends
-│   │   ├── __init__.py
-│   │   ├── base.py            # JobStorage ABC
-│   │   ├── redis_storage.py
-│   │   ├── sql_storage.py     # Potentially using SQLAlchemy
-│   │   └── memory_storage.py
-│   └── dashboard/             # Optional: Web UI components
-│       ├── __init__.py
-│       ├── app.py             # FastAPI/Starlette/Flask app
-│       ├── routes.py
-│       ├── static/
-│       └── templates/
-├── integrations/              # Framework-specific integrations
-│   ├── pytaskflow_fastapi/
-│   │   ├── __init__.py
-│   │   └── plugin.py
-│   ├── pytaskflow_litestar/
-│   │   ├── __init__.py
-│   │   └── plugin.py
-│   └── pytaskflow_script/     # Helpers for CLI/script usage
-│       ├── __init__.py
-│       └── runner.py
-├── examples/
+├── src/
+│   └── pytaskflow/             # Core library code
+│       ├── __init__.py         # Public API (enqueue, schedule, etc.)
+│       ├── client.py           # BackgroundJobClient
+│       ├── common/             # Shared utilities, Job class, enums
+│       ├── config.py           # Global configuration
+│       ├── execution/          # Job execution logic
+│       ├── filters/            # Job filters
+│       ├── serialization/      # Job (de)serialization
+│       ├── server/             # Worker logic
+│       ├── storage/            # Storage backends
+│       └── dashboard/          # Optional dashboard components
 ├── tests/
 ├── docs/
 ├── pyproject.toml

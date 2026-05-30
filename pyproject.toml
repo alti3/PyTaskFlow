@@ -3,7 +3,7 @@ name = "pytaskflow"
 version = "0.1.0"
 description = "Background jobs and workers for Python"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "redis>=5.0.0",
     "cronsim>=2.6",
@@ -13,11 +13,6 @@ dependencies = [
 dashboard = [
     "litestar[jinja,standard]>=2.16.0",
     "uvicorn>=0.35.0",
-]
-dev = [
-    "pytest>=8.4.1",
-    "ruff>=0.12.1",
-    "ty>=0.0.1a12",
 ]
 fastapi = [
     "fastapi>=0.110.0",
@@ -33,14 +28,16 @@ sql = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.9.29,<0.10.0"]
+requires = ["uv_build>=0.11.17,<0.12"]
 build-backend = "uv_build"
-
-[tool.uv.build-backend]
-module-name = "pytaskflow"
-module-root = ""
 
 [dependency-groups]
 dev = [
+    "fastapi>=0.110.0",
+    "litestar[jinja,standard]>=2.16.0",
+    "pytest>=8.4.1",
     "ruff>=0.12.1",
+    "sqlalchemy>=2.0.0",
+    "ty>=0.0.1a12",
+    "uvicorn>=0.35.0",
 ]

@@ -1,4 +1,5 @@
 """Example of how to run the PyTaskFlow dashboard."""
+
 from __future__ import annotations
 
 import argparse

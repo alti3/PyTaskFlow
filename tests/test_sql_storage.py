@@ -2,13 +2,13 @@ import pytest
 from datetime import UTC, datetime, timedelta
 
 sqlalchemy = pytest.importorskip("sqlalchemy")
-from sqlalchemy import create_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
-from pytaskflow.client import BackgroundJobClient
-from pytaskflow.common.job import Job
-from pytaskflow.common.states import EnqueuedState, FailedState, ScheduledState
-from pytaskflow.storage.sql_storage import SqlStorage, QueueEntryModel
+from pytaskflow.client import BackgroundJobClient  # noqa: E402
+from pytaskflow.common.job import Job  # noqa: E402
+from pytaskflow.common.states import EnqueuedState, FailedState, ScheduledState  # noqa: E402
+from pytaskflow.storage.sql_storage import QueueEntryModel, SqlStorage  # noqa: E402
 
 
 def _make_storage() -> SqlStorage:
