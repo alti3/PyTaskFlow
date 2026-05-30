@@ -1,6 +1,6 @@
 """Core dashboard routes."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from litestar import Controller, get
 from litestar.response import Template
@@ -19,7 +19,7 @@ class CoreController(Controller):
     dependencies = {"client": Provide(get_client, sync_to_thread=False)}
 
     def _annotate_server_status(self, servers: list[dict]) -> list[dict]:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         annotated: list[dict] = []
         for server in servers:
             entry = dict(server)
@@ -29,7 +29,7 @@ class CoreController(Controller):
                 try:
                     heartbeat = datetime.fromisoformat(last_heartbeat)
                     if heartbeat.tzinfo is None:
-                        heartbeat = heartbeat.replace(tzinfo=UTC)
+                        heartbeat = heartbeat.replace(tzinfo=timezone.utc)
                     age_seconds = max(0, int((now - heartbeat).total_seconds()))
                     if age_seconds <= 30:
                         status = "healthy"

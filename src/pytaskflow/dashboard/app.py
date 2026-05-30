@@ -1,6 +1,8 @@
 """Litestar application factory for the PyTaskFlow dashboard."""
 
 from pathlib import Path
+from typing import Any, cast
+
 from litestar import Litestar
 from litestar.contrib.jinja import JinjaTemplateEngine
 from litestar.static_files import create_static_files_router
@@ -12,14 +14,14 @@ from litestar.datastructures import State
 from .controllers.core import CoreController
 from .controllers.jobs import JobsController
 
-from pytaskflow.client import Client
+from pytaskflow.client import BackgroundJobClient
 
 
-async def get_client(state: State) -> "Client":
+async def get_client(state: State) -> BackgroundJobClient:
     return state.client
 
 
-def create_dashboard_app(client: "Client", debug: bool = False) -> Litestar:
+def create_dashboard_app(client: BackgroundJobClient, debug: bool = False) -> Litestar:
     """Create the Litestar application for the dashboard.
 
     Args:
@@ -39,9 +41,12 @@ def create_dashboard_app(client: "Client", debug: bool = False) -> Litestar:
             JobsController,
             create_static_files_router(path="/static", directories=[static_path]),
         ],
-        template_config=TemplateConfig(
-            directory=templates_path,
-            engine=JinjaTemplateEngine,
+        template_config=cast(
+            Any,
+            TemplateConfig(
+                directory=templates_path,
+                engine=JinjaTemplateEngine,
+            ),
         ),
         state=State({"client": client}),
         dependencies={"client": Provide(get_client)},

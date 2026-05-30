@@ -1,6 +1,7 @@
 # Installation
 
-PyTaskFlow is designed to work with Python 3.13+.
+PyTaskFlow is designed to work with currently supported Python releases: 3.10
+through 3.14.
 
 ## Core Package
 

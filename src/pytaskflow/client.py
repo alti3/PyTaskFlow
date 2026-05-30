@@ -1,6 +1,5 @@
-# pytaskflow/client.py
-from typing import Callable, Any, Optional, List, Dict
-from datetime import datetime, UTC
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Protocol
 
 from .common.job import Job
 from .common.states import DeletedState, EnqueuedState, FailedState, ScheduledState
@@ -8,6 +7,13 @@ from .storage.base import JobStorage
 from .storage.redis_storage import RedisStorage
 from .serialization.base import BaseSerializer
 from .serialization.json_serializer import JsonSerializer
+
+
+class JobCallable(Protocol):
+    __module__: str
+    __name__: str
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 class BackgroundJobClient:
@@ -24,7 +30,7 @@ class BackgroundJobClient:
         self.storage = storage
         self.serializer = serializer or JsonSerializer()
 
-    def enqueue(self, target_func: Callable, *args: Any, **kwargs: Any) -> str:
+    def enqueue(self, target_func: JobCallable, *args: Any, **kwargs: Any) -> str:
         """Creates a fire-and-forget job."""
         module_name, func_name = target_func.__module__, target_func.__name__
         serialized_args = self.serializer.serialize_args(target_func, *args, **kwargs)
@@ -40,14 +46,18 @@ class BackgroundJobClient:
 
     # ... (schedule, add_or_update_recurring, etc. remain the same)
     def schedule(
-        self, target_func: Callable, enqueue_at: datetime, *args: Any, **kwargs: Any
+        self,
+        target_func: JobCallable,
+        enqueue_at: datetime,
+        *args: Any,
+        **kwargs: Any,
     ) -> str:
         # Similar to enqueue, but creates a Job with ScheduledState
         module_name = target_func.__module__
         func_name = target_func.__name__
         serialized_args = self.serializer.serialize_args(target_func, *args, **kwargs)
 
-        scheduled_state = ScheduledState(enqueue_at, datetime.now(UTC))
+        scheduled_state = ScheduledState(enqueue_at, datetime.now(timezone.utc))
 
         job = Job(
             target_module=module_name,
@@ -64,10 +74,10 @@ class BackgroundJobClient:
     def add_or_update_recurring(
         self,
         recurring_job_id: str,
-        target_func: Callable,
+        target_func: JobCallable,
         cron_expression: str,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ):
         # Creates a job template (without an ID) to be stored.
         module_name = target_func.__module__

@@ -4,7 +4,7 @@ import time
 from collections import deque
 from threading import RLock, Condition
 from typing import Optional, List, Dict, Any
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from pytaskflow.storage.base import JobStorage
 from pytaskflow.common.job import Job
@@ -33,7 +33,7 @@ class MemoryStorage(JobStorage):
     def _record_history(self, job_id: str, state_name: str, state_data: Dict[str, Any]):
         entry = {
             "state": state_name,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": state_data,
         }
         self._history.setdefault(job_id, []).append(entry)
@@ -67,7 +67,7 @@ class MemoryStorage(JobStorage):
             self._recurring_jobs[recurring_job_id] = data
 
     def _get_current_time(self) -> datetime:
-        return datetime.now(UTC)
+        return datetime.now(timezone.utc)
 
     def remove_recurring_job(self, recurring_job_id: str):
         with self._lock:
@@ -95,7 +95,7 @@ class MemoryStorage(JobStorage):
             self.enqueue(job_instance)
 
     def dequeue(
-        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+        self, queues: List[str], timeout_seconds: float, server_id: str, worker_id: str
     ) -> Optional[Job]:
         with self._lock:
             start_time = time.monotonic()
@@ -191,7 +191,7 @@ class MemoryStorage(JobStorage):
                 "id": server_id,
                 "worker_count": worker_count,
                 "queues": list(queues),
-                "last_heartbeat": datetime.now(UTC).isoformat(),
+                "last_heartbeat": datetime.now(timezone.utc).isoformat(),
             }
 
     def remove_server(self, server_id: str):

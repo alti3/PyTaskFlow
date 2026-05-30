@@ -4,9 +4,9 @@ import json
 import logging
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import Callable, List, Optional, cast
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
 from cronsim import CronSim
@@ -37,7 +37,7 @@ class Worker:
         serializer: Optional[BaseSerializer] = None,
         queues: List[str] = ["default"],
         worker_count: int = 4,
-        scheduler_poll_interval_seconds: int = 15,
+        scheduler_poll_interval_seconds: float = 15,
         concurrency_mode: ConcurrencyMode = ConcurrencyMode.THREADED,
     ):
         self.storage = storage
@@ -66,13 +66,14 @@ class Worker:
 
     def _enqueue_due_scheduled_jobs(self):
         storage = self.storage
-        if hasattr(storage, "enqueue_due_scheduled_jobs"):
-            storage.enqueue_due_scheduled_jobs()
+        enqueue_due = getattr(storage, "enqueue_due_scheduled_jobs", None)
+        if callable(enqueue_due):
+            cast(Callable[[], object], enqueue_due)()
             return
         if not isinstance(storage, RedisStorage):  # Phase 2 only supports Redis
             return
 
-        now_timestamp = datetime.now(UTC).timestamp()
+        now_timestamp = datetime.now(timezone.utc).timestamp()
 
         while True:
             # Using the Lua script to atomically move jobs
@@ -81,7 +82,7 @@ class Worker:
                 args=[
                     now_timestamp,
                     EnqueuedState.NAME,
-                    datetime.now(UTC).isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                 ],
             )
 
@@ -97,8 +98,9 @@ class Worker:
     def _enqueue_due_recurring_jobs(self):
         # This entire method should be protected by a distributed lock to ensure only one worker
         # runs the recurring job scheduler at a time.
-        if hasattr(self.storage, "enqueue_due_recurring_jobs"):
-            self.storage.enqueue_due_recurring_jobs()
+        enqueue_due = getattr(self.storage, "enqueue_due_recurring_jobs", None)
+        if callable(enqueue_due):
+            cast(Callable[[], object], enqueue_due)()
             return
         if not isinstance(self.storage, RedisStorage):
             return
@@ -108,9 +110,10 @@ class Worker:
             return  # Another worker is handling it
 
         try:
-            now = datetime.now(UTC)
-            recurring_job_ids = self.storage.redis_client.smembers(
-                "pytaskflow:recurring-jobs:ids"
+            now = datetime.now(timezone.utc)
+            recurring_job_ids = cast(
+                set[str],
+                self.storage.redis_client.smembers("pytaskflow:recurring-jobs:ids"),
             )
 
             for job_id in recurring_job_ids:
@@ -122,8 +125,11 @@ class Worker:
                     continue
 
                 try:
-                    data_str = self.storage.redis_client.hget(
-                        "pytaskflow:recurring-jobs", job_id
+                    data_str = cast(
+                        str | None,
+                        self.storage.redis_client.hget(
+                            "pytaskflow:recurring-jobs", job_id
+                        ),
                     )
                     if not data_str:
                         continue

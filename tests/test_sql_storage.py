@@ -1,5 +1,5 @@
 import pytest
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 sqlalchemy = pytest.importorskip("sqlalchemy")
 from sqlalchemy import create_engine  # noqa: E402
@@ -84,8 +84,8 @@ def test_sql_storage_requeue_from_failed():
 
 def test_sql_storage_scheduled_jobs_enqueue_due():
     storage = _make_storage()
-    enqueue_at = datetime.now(UTC) - timedelta(seconds=1)
-    scheduled_state = ScheduledState(enqueue_at, datetime.now(UTC))
+    enqueue_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    scheduled_state = ScheduledState(enqueue_at, datetime.now(timezone.utc))
     job = Job(
         target_module="tests.test_tasks",
         target_function="success_task",
@@ -121,7 +121,7 @@ def test_sql_storage_recover_stuck_jobs():
         ["default"], timeout_seconds=0, server_id="server-1", worker_id="worker-1"
     )
 
-    stale_time = datetime.now(UTC) - timedelta(minutes=10)
+    stale_time = datetime.now(timezone.utc) - timedelta(minutes=10)
     with storage._session_factory.begin() as session:
         entry = session.execute(
             sqlalchemy.select(QueueEntryModel).where(QueueEntryModel.job_id == job.id)

@@ -1,10 +1,15 @@
+from typing import Any
+
 from .base import JobStorage
 from .memory_storage import MemoryStorage
 from .redis_storage import RedisStorage
 
+SqlStorage: Any = None
 try:  # Optional dependency
-    from .sql_storage import SqlStorage
+    from . import sql_storage as _sql_storage
 except ImportError:  # pragma: no cover
-    SqlStorage = None  # type: ignore[assignment]
+    pass
+else:
+    SqlStorage = _sql_storage.SqlStorage
 
 __all__ = ["JobStorage", "MemoryStorage", "RedisStorage", "SqlStorage"]

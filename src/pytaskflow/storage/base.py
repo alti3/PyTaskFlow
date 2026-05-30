@@ -27,7 +27,7 @@ class JobStorage(ABC):
 
     @abstractmethod
     def dequeue(
-        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+        self, queues: List[str], timeout_seconds: float, server_id: str, worker_id: str
     ) -> Optional[Job]: ...
 
     @abstractmethod

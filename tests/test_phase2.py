@@ -2,7 +2,7 @@ import pytest
 import time
 import json
 import redis
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Thread
 
 from pytaskflow.common.job import Job
@@ -175,7 +175,7 @@ def test_redis_storage_get_job_data(redis_storage):
 
 
 def test_redis_storage_schedule(redis_storage, redis_client):
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     enqueue_at = now + timedelta(seconds=10)
     job = Job(
         target_module="tests.test_tasks",
@@ -245,7 +245,7 @@ def test_redis_storage_trigger_recurring_job(redis_storage, redis_client):
 
 # Test BackgroundJobClient with RedisStorage
 def test_client_schedule(client, redis_storage, redis_client):
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     enqueue_at = now + timedelta(seconds=5)
     job_id = client.schedule(my_test_function, enqueue_at, 1, 2)
     assert job_id is not None
@@ -277,7 +277,7 @@ def test_client_add_remove_trigger_recurring(client, redis_storage, redis_client
 # Test Worker with RedisStorage (Scheduler functionality)
 def test_worker_processes_scheduled_job(redis_storage, json_serializer, redis_client):
     # Schedule a job to be enqueued very soon
-    enqueue_at = datetime.now(UTC) + timedelta(seconds=1)
+    enqueue_at = datetime.now(timezone.utc) + timedelta(seconds=1)
     job = Job(
         target_module="tests.test_tasks",
         target_function="success_task",
@@ -325,7 +325,9 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
     # Manually set last_execution to 2 minutes ago to ensure the job is due
     stored_data = redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
     data = json.loads(stored_data)
-    data["last_execution"] = (datetime.now(UTC) - timedelta(minutes=2)).isoformat()
+    data["last_execution"] = (
+        datetime.now(timezone.utc) - timedelta(minutes=2)
+    ).isoformat()
     redis_client.hset("pytaskflow:recurring-jobs", recurring_job_id, json.dumps(data))
 
     worker = Worker(
@@ -349,7 +351,7 @@ def test_worker_processes_recurring_job(redis_storage, json_serializer, redis_cl
 
     # Verify the last_execution was updated to a recent time (within the last 10 seconds)
     last_execution = datetime.fromisoformat(data["last_execution"])
-    assert (datetime.now(UTC) - last_execution).total_seconds() < 10
+    assert (datetime.now(timezone.utc) - last_execution).total_seconds() < 10
 
     # We can't easily get the job_id of the triggered job, so we'll check the queue directly
     # The worker processes jobs, so the queue should be empty or nearly empty

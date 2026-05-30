@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Optional
+from typing import Any, Optional, cast
 
 try:
     from fastapi import FastAPI
@@ -26,8 +26,8 @@ class PyTaskFlowFastAPIPlugin:
         self._worker_thread: Optional[threading.Thread] = None
 
         app.state.pytaskflow_client = self.client
-        app.add_event_handler("startup", self.startup)
-        app.add_event_handler("shutdown", self.shutdown)
+        cast(Any, app).add_event_handler("startup", self.startup)
+        cast(Any, app).add_event_handler("shutdown", self.shutdown)
 
     def get_client(self) -> BackgroundJobClient:
         return self.client
@@ -36,7 +36,7 @@ class PyTaskFlowFastAPIPlugin:
         from pytaskflow.dashboard.app import create_dashboard_app
 
         dashboard_app = create_dashboard_app(self.client, debug=debug)
-        self.app.mount(path, dashboard_app)
+        self.app.mount(path, cast(Any, dashboard_app))
 
     def run_worker_in_background(self, **worker_options) -> "PyTaskFlowFastAPIPlugin":
         self.worker = Worker(self.storage, self.client.serializer, **worker_options)

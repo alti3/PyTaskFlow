@@ -2,8 +2,8 @@
 import redis
 import json
 import logging
-from typing import Optional, List, Any, Dict
-from datetime import datetime, UTC
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, cast
 
 from .base import JobStorage
 from ..common.job import Job
@@ -163,12 +163,12 @@ class RedisStorage(JobStorage):
                 job_dict[key] = int(value)
             else:
                 job_dict[key] = value
-        return Job(**job_dict)
+        return Job(**cast(Any, job_dict))
 
     def _record_initial_state(self, job: Job) -> None:
         history_entry = {
             "state": job.state_name,
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": job.state_data,
         }
         history_key = f"pytaskflow:job:{job.id}:history"
@@ -196,7 +196,7 @@ class RedisStorage(JobStorage):
         history_entry = json.dumps(
             {
                 "state": state.name,
-                "timestamp": datetime.now(UTC).isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "data": state.serialize_data(),
             },
             default=str,
@@ -215,7 +215,7 @@ class RedisStorage(JobStorage):
 
     def get_job_data(self, job_id: str) -> Optional[Job]:
         job_key = f"pytaskflow:job:{job_id}"
-        job_data = self.redis_client.hgetall(job_key)
+        job_data = cast(dict, self.redis_client.hgetall(job_key))
         if not job_data:
             return None
         return self._deserialize_job_from_storage(job_data)
@@ -224,7 +224,12 @@ class RedisStorage(JobStorage):
         self, state_name: str, start: int, count: int
     ) -> List[str]:
         state_key = f"pytaskflow:jobs:{state_name}"
-        return self.redis_client.sort(state_key, start=start, num=count, desc=True)
+        return list(
+            cast(
+                list[str],
+                self.redis_client.sort(state_key, start=start, num=count, desc=True),
+            )
+        )
 
     def get_jobs_by_state(self, state_name: str, start: int, count: int) -> List[Job]:
         job_ids = self.get_job_ids_by_state(state_name, start, count)
@@ -238,7 +243,7 @@ class RedisStorage(JobStorage):
         return jobs
 
     def get_state_job_count(self, state_name: str) -> int:
-        count = self.redis_client.hget("pytaskflow:stats", state_name)
+        count = cast(str | None, self.redis_client.hget("pytaskflow:stats", state_name))
         if count is not None:
             try:
                 value = int(count)
@@ -247,7 +252,7 @@ class RedisStorage(JobStorage):
             except (TypeError, ValueError):
                 pass
         state_key = f"pytaskflow:jobs:{state_name}"
-        return self.redis_client.scard(state_key)
+        return int(cast(int, self.redis_client.scard(state_key)))
 
     def get_all_servers(self) -> List[Dict]:
         return self.get_servers()
@@ -258,10 +263,11 @@ class RedisStorage(JobStorage):
             "id": server_id,
             "worker_count": str(worker_count),
             "queues": json.dumps(queues),
-            "last_heartbeat": datetime.now(UTC).isoformat(),
+            "last_heartbeat": datetime.now(timezone.utc).isoformat(),
         }
         with self.redis_client.pipeline() as pipe:
-            pipe.hset(server_key, mapping=data)
+            redis_pipe = cast(Any, pipe)
+            redis_pipe.hset(server_key, mapping=data)
             pipe.expire(server_key, 60)
             pipe.sadd("pytaskflow:servers", server_id)
             pipe.execute()
@@ -273,12 +279,16 @@ class RedisStorage(JobStorage):
             pipe.execute()
 
     def get_servers(self) -> List[dict]:
-        server_ids = list(self.redis_client.smembers("pytaskflow:servers"))
+        server_ids = list(
+            cast(set[str], self.redis_client.smembers("pytaskflow:servers"))
+        )
         servers = []
         for server_id in server_ids:
             if isinstance(server_id, bytes):
                 server_id = server_id.decode("utf-8")
-            data = self.redis_client.hgetall(f"pytaskflow:server:{server_id}")
+            data = cast(
+                dict, self.redis_client.hgetall(f"pytaskflow:server:{server_id}")
+            )
             if not data:
                 self.redis_client.srem("pytaskflow:servers", server_id)
                 continue
@@ -304,11 +314,15 @@ class RedisStorage(JobStorage):
         return servers
 
     def get_recurring_jobs(self, start: int, count: int) -> List[dict]:
-        ids = list(self.redis_client.smembers("pytaskflow:recurring-jobs:ids"))
+        ids = list(
+            cast(set[str], self.redis_client.smembers("pytaskflow:recurring-jobs:ids"))
+        )
         if not ids:
             return []
         ids = ids[start : start + count]
-        jobs_data = self.redis_client.hmget("pytaskflow:recurring-jobs", ids)
+        jobs_data = cast(
+            list[str | None], self.redis_client.hmget("pytaskflow:recurring-jobs", ids)
+        )
         jobs = []
         for recurring_job_id, job_data in zip(ids, jobs_data):
             if not job_data:
@@ -353,7 +367,10 @@ class RedisStorage(JobStorage):
             pipe.execute()
 
     def trigger_recurring_job(self, recurring_job_id: str):
-        data_str = self.redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id)
+        data_str = cast(
+            str | None,
+            self.redis_client.hget("pytaskflow:recurring-jobs", recurring_job_id),
+        )
         if not data_str:
             return
 
@@ -372,13 +389,16 @@ class RedisStorage(JobStorage):
         self.enqueue(job_instance)
 
     def dequeue(
-        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+        self, queues: List[str], timeout_seconds: float, server_id: str, worker_id: str
     ) -> Optional[Job]:
         if not queues:
             return None
 
         queue_keys = [f"pytaskflow:queue:{q}" for q in queues]
-        result = self.redis_client.brpop(queue_keys, timeout=timeout_seconds)
+        result = cast(
+            tuple[str, str] | None,
+            self.redis_client.brpop(queue_keys, timeout=timeout_seconds),
+        )
         if not result:
             return None
 
@@ -420,7 +440,7 @@ class RedisStorage(JobStorage):
 
     def get_job_history(self, job_id: str) -> List[dict]:
         history_key = f"pytaskflow:job:{job_id}:history"
-        entries = self.redis_client.lrange(history_key, 0, -1)
+        entries = cast(list[str], self.redis_client.lrange(history_key, 0, -1))
         history = []
         for entry in entries:
             if isinstance(entry, bytes):
@@ -433,10 +453,13 @@ class RedisStorage(JobStorage):
 
     def get_statistics(self) -> dict:
         counts = {
-            state: self.redis_client.scard(f"pytaskflow:jobs:{state}")
+            state: int(cast(int, self.redis_client.scard(f"pytaskflow:jobs:{state}")))
             for state in ALL_STATES
         }
         with self.redis_client.pipeline() as pipe:
-            pipe.hset("pytaskflow:stats", mapping=counts)
+            pipe.hset(
+                "pytaskflow:stats",
+                mapping={state: str(count) for state, count in counts.items()},
+            )
             pipe.execute()
         return counts

@@ -11,7 +11,7 @@ class _GlobalConfig:
 _GLOBAL_CONFIG = _GlobalConfig()
 
 
-def configure(storage: JobStorage) -> None:
+def configure(storage: Optional[JobStorage]) -> None:
     _GLOBAL_CONFIG.storage = storage
 
 

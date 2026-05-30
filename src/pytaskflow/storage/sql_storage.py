@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from cronsim import CronSim
 from sqlalchemy import (
+    CursorResult,
     DateTime,
     Engine,
     Integer,
@@ -113,7 +114,11 @@ class SqlStorage(JobStorage):
     ) -> None:
         if engine is None and connection_url is None:
             raise ValueError("connection_url or engine is required")
-        self.engine = engine or create_engine(connection_url)
+        if engine is not None:
+            self.engine = engine
+        else:
+            assert connection_url is not None
+            self.engine = create_engine(connection_url)
         self._session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
         if create_tables:
             Base.metadata.create_all(self.engine)
@@ -159,7 +164,7 @@ class SqlStorage(JobStorage):
         entry = JobHistoryModel(
             job_id=job_id,
             state=state.name,
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(timezone.utc),
             data=self._serialize_state_data(state.serialize_data()),
         )
         session.add(entry)
@@ -192,7 +197,7 @@ class SqlStorage(JobStorage):
                 job_id=job_id,
                 queue=queue,
                 status=status,
-                enqueued_at=enqueued_at or datetime.now(UTC),
+                enqueued_at=enqueued_at or datetime.now(timezone.utc),
                 fetched_at=fetched_at,
                 server_id=server_id,
                 worker_id=worker_id,
@@ -337,7 +342,7 @@ class SqlStorage(JobStorage):
             self._record_history(session, job.id, EnqueuedState(queue=job.queue))
 
     def dequeue(
-        self, queues: List[str], timeout_seconds: int, server_id: str, worker_id: str
+        self, queues: List[str], timeout_seconds: float, server_id: str, worker_id: str
     ) -> Optional[Job]:
         if not queues:
             return None
@@ -345,7 +350,7 @@ class SqlStorage(JobStorage):
         deadline = time.monotonic() + timeout_seconds
         while True:
             with self._session_factory.begin() as session:
-                now = datetime.now(UTC)
+                now = datetime.now(timezone.utc)
                 query = (
                     select(QueueEntryModel)
                     .where(
@@ -375,7 +380,7 @@ class SqlStorage(JobStorage):
                             worker_id=worker_id,
                         )
                     )
-                    if updated.rowcount == 1:
+                    if isinstance(updated, CursorResult) and updated.rowcount == 1:
                         job = session.get(JobModel, entry.job_id)
                         if job:
                             processing_state = ProcessingState(server_id, worker_id)
@@ -424,7 +429,7 @@ class SqlStorage(JobStorage):
                     job_id=job.id,
                     queue=state.queue,
                     status="enqueued",
-                    enqueued_at=datetime.now(UTC),
+                    enqueued_at=datetime.now(timezone.utc),
                     fetched_at=None,
                 )
             elif isinstance(state, (DeletedState, AwaitingState)):
@@ -487,14 +492,14 @@ class SqlStorage(JobStorage):
             if entry:
                 entry.worker_count = worker_count
                 entry.queues = json.dumps(list(queues), default=str)
-                entry.last_heartbeat = datetime.now(UTC)
+                entry.last_heartbeat = datetime.now(timezone.utc)
             else:
                 session.add(
                     ServerModel(
                         id=server_id,
                         worker_count=worker_count,
                         queues=json.dumps(list(queues), default=str),
-                        last_heartbeat=datetime.now(UTC),
+                        last_heartbeat=datetime.now(timezone.utc),
                     )
                 )
 
@@ -600,7 +605,7 @@ class SqlStorage(JobStorage):
             return counts
 
     def enqueue_due_scheduled_jobs(self, batch_size: int = 100) -> List[str]:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         moved: List[str] = []
         with self._session_factory.begin() as session:
             query = (
@@ -638,7 +643,7 @@ class SqlStorage(JobStorage):
         return moved
 
     def enqueue_due_recurring_jobs(self, batch_size: int = 100) -> List[str]:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         triggered: List[str] = []
         with self._session_factory.begin() as session:
             query = (
@@ -703,7 +708,7 @@ class SqlStorage(JobStorage):
         return triggered
 
     def recover_stuck_jobs(self, max_age_seconds: int, limit: int = 100) -> List[str]:
-        cutoff = datetime.now(UTC) - timedelta(seconds=max_age_seconds)
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=max_age_seconds)
         recovered: List[str] = []
         with self._session_factory.begin() as session:
             query = (
@@ -735,7 +740,7 @@ class SqlStorage(JobStorage):
                 job.queue = queue_name
 
                 entry.status = "enqueued"
-                entry.enqueued_at = datetime.now(UTC)
+                entry.enqueued_at = datetime.now(timezone.utc)
                 entry.fetched_at = None
                 entry.server_id = None
                 entry.worker_id = None

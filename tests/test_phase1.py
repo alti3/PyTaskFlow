@@ -1,7 +1,7 @@
 import pytest
 import time
 import json
-from datetime import datetime, UTC, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Thread
 
 from pytaskflow.common.job import Job
@@ -68,7 +68,7 @@ def test_job_creation():
     )
     assert job.id is not None
     assert isinstance(job.created_at, datetime)
-    assert job.created_at.date() == datetime.now(UTC).date()
+    assert job.created_at.date() == datetime.now(timezone.utc).date()
     assert job.target_module == "tests.test_tasks"
     assert job.target_function == "success_task"
     assert job.state_name == EnqueuedState.NAME
@@ -121,7 +121,7 @@ def test_failed_state():
 
 
 def test_scheduled_state():
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     later = now + timedelta(minutes=5)
     state = ScheduledState(
         enqueue_at=later, scheduled_at=now, reason="Delayed execution"

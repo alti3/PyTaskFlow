@@ -2,11 +2,12 @@ from .client import BackgroundJobClient, Client
 from .config import configure as _configure, get_storage
 from .serialization.base import BaseSerializer
 from .serialization.json_serializer import JsonSerializer
+from .storage.base import JobStorage
 
 _client: BackgroundJobClient | None = None
 
 
-def configure(storage) -> None:
+def configure(storage: JobStorage | None) -> None:
     _configure(storage)
     global _client
     _client = None
