@@ -2,6 +2,8 @@
 site_name = "PyTaskFlow"
 site_description = "Background jobs and workers for Python"
 site_url = "https://alti3.github.io/PyTaskFlow/"
+repo_url = "https://github.com/alti3/PyTaskFlow"
+repo_name = "alti3/PyTaskFlow"
 nav = [
     { "Home" = "index.md" },
     { "Guide" = [
